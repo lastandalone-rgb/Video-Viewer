@@ -5,7 +5,9 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && electron-packager . \"VideoPlayer\" --platform=win32 --arch=x64 --out=release --overwrite",
+    "build": "vite build && electron-builder",
+    "build:win": "vite build && electron-builder --win",
+    "build:mac": "vite build && electron-builder --mac",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -43,6 +45,21 @@
     ],
     "win": {
       "target": "portable"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.video",
+      "icon": "public/icon.icns"
+    },
+    "dmg": {
+      "title": "Video Player",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
     }
   }
 }

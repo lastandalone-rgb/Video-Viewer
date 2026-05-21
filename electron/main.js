@@ -4,6 +4,75 @@ import { fileURLToPath, pathToFileURL } from 'url'
 import fs from 'fs/promises'
 import fsSync from 'fs'
 import crypto from 'crypto'
+import { spawn, execSync } from 'child_process'
+
+// Detect if ffmpeg is available on the system
+function findFfmpeg() {
+  const candidates = [
+    '/opt/homebrew/bin/ffmpeg',   // Apple Silicon Homebrew
+    '/usr/local/bin/ffmpeg',      // Intel Homebrew
+    '/usr/bin/ffmpeg',            // System
+  ]
+  for (const p of candidates) {
+    if (fsSync.existsSync(p)) return p
+  }
+  try {
+    const result = execSync('which ffmpeg', { encoding: 'utf8' }).trim()
+    if (result) return result
+  } catch (_) {}
+  return null
+}
+
+const FFMPEG_PATH = findFfmpeg()
+console.log('[Video-Viewer] ffmpeg path:', FFMPEG_PATH || 'not found')
+
+function findFfprobe() {
+  const candidates = [
+    '/opt/homebrew/bin/ffprobe',
+    '/usr/local/bin/ffprobe',
+    '/usr/bin/ffprobe',
+  ]
+  for (const p of candidates) {
+    if (fsSync.existsSync(p)) return p
+  }
+  try {
+    const result = execSync('which ffprobe', { encoding: 'utf8' }).trim()
+    if (result) return result
+  } catch (_) {}
+  return null
+}
+const FFPROBE_PATH = findFfprobe()
+console.log('[Video-Viewer] ffprobe path:', FFPROBE_PATH || 'not found')
+
+async function checkNeedsTranscode(filePath, ext) {
+  if (!FFMPEG_PATH || !FFPROBE_PATH) return false
+  if (!['.mkv', '.avi', '.flv', '.mov'].includes(ext)) return false
+  
+  return new Promise((resolve) => {
+    const probe = spawn(FFPROBE_PATH, [
+      '-v', 'error',
+      '-select_streams', 'a:0',
+      '-show_entries', 'stream=codec_name',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ])
+    
+    let out = ''
+    probe.stdout.on('data', d => out += d.toString())
+    probe.on('close', () => {
+      const codec = out.trim().toLowerCase()
+      console.log(`[Video-Viewer] Audio codec for ${path.basename(filePath)}: ${codec || 'unknown'}`)
+      
+      const supported = ['aac', 'mp3', 'vorbis', 'opus', 'flac']
+      if (codec && !supported.includes(codec)) {
+        resolve(true)
+      } else {
+        resolve(false)
+      }
+    })
+    probe.on('error', () => resolve(false))
+  })
+}
 
 const currentDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta?.url || 'file://'))
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -15,14 +84,20 @@ let mainWindow
 // Removed custom protocol as native file:// is more reliable for streaming
 
 function createWindow() {
+  const isMac = process.platform === 'darwin'
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    titleBarStyle: 'hidden', // Modern look
-    titleBarOverlay: {
-      color: '#0f172a',
-      symbolColor: '#f8fafc',
-    },
+    // macOS: use 'hiddenInset' to show traffic lights inside the window
+    // Windows: use 'hidden' with titleBarOverlay for custom chrome buttons
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    ...(isMac ? {} : {
+      titleBarOverlay: {
+        color: '#0f172a',
+        symbolColor: '#f8fafc',
+      }
+    }),
     webPreferences: {
       preload: path.join(currentDir, 'preload.js'),
       nodeIntegration: false,
@@ -40,8 +115,86 @@ function createWindow() {
   }
 }
 
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } }
+])
+
 app.whenReady().then(() => {
-  // No longer need media protocol handler, native file:// works with webSecurity: false
+  // Register custom media:// protocol for MKV/AC3 transcoding on macOS
+  protocol.handle('media', async (request) => {
+    const url = new URL(request.url)
+    // Decode the file path from media://localhost/<encoded-path>
+    let filePath = decodeURIComponent(url.pathname)
+    // On Windows: /C:/path -> C:/path
+    if (/^\/[A-Za-z]:/.test(filePath)) filePath = filePath.slice(1)
+
+    const ext = path.extname(filePath).toLowerCase()
+    const needsTranscode = await checkNeedsTranscode(filePath, ext)
+
+    if (needsTranscode) {
+      // Stream via ffmpeg: copy video, transcode audio to AAC inside fragmented MP4
+      let ff = null
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            let closed = false
+
+            const cleanup = () => {
+              if (!closed) {
+                closed = true
+                try { controller.close() } catch (_) {}
+              }
+              if (ff && !ff.killed) {
+                ff.stdout.destroy()
+                ff.kill('SIGKILL')
+              }
+            }
+
+            const seekParam = url.searchParams.get('seek')
+            const ffmpegArgs = []
+            if (seekParam && parseFloat(seekParam) > 0) {
+              ffmpegArgs.push('-ss', parseFloat(seekParam).toString())
+            }
+            ffmpegArgs.push(
+              '-i', filePath,
+              '-c:v', 'copy',          // copy video stream as-is
+              '-c:a', 'aac',           // transcode audio to AAC
+              '-b:a', '192k',
+              '-f', 'matroska',        // output MKV container
+              'pipe:1'
+            )
+
+            ff = spawn(FFMPEG_PATH, ffmpegArgs, { stdio: ['ignore', 'pipe', 'ignore'] })
+
+            ff.stdout.on('data', (chunk) => {
+              if (!closed) {
+                try { controller.enqueue(chunk) } catch (_) { cleanup() }
+              }
+            })
+            ff.stdout.on('end', () => cleanup())
+            ff.stdout.on('error', () => cleanup())
+            ff.on('error', () => cleanup())
+            ff.on('close', () => cleanup())
+          },
+          cancel() {
+            // Called when the browser cancels the request (e.g. video src changes)
+            if (ff && !ff.killed) {
+              ff.stdout.destroy()
+              ff.kill('SIGKILL')
+            }
+          }
+        }),
+        { headers: { 'Content-Type': 'video/x-matroska' } }
+      )
+    }
+
+
+    // Fallback: serve file directly via net.fetch
+    return net.fetch(pathToFileURL(filePath).href, {
+      headers: request.headers,
+      method: request.method,
+    })
+  })
 
   createWindow()
 
@@ -68,11 +221,13 @@ ipcMain.handle('open-popout-player', async (event, data) => {
   const popoutWin = new BrowserWindow({
     width: 1000,
     height: 700,
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#0f172a',
-      symbolColor: '#f8fafc',
-    },
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform === 'darwin' ? {} : {
+      titleBarOverlay: {
+        color: '#0f172a',
+        symbolColor: '#f8fafc',
+      }
+    }),
     webPreferences: {
       preload: path.join(currentDir, 'preload.js'),
       nodeIntegration: false,
@@ -195,6 +350,25 @@ ipcMain.handle('update-collection', async (event, folderPath, updates) => {
     await writeDb(db)
   }
   return db.folders
+})
+
+ipcMain.handle('get-video-duration', async (event, filePath) => {
+  if (!FFPROBE_PATH) return null
+  return new Promise((resolve) => {
+    const probe = spawn(FFPROBE_PATH, [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ])
+    let out = ''
+    probe.stdout.on('data', d => out += d.toString())
+    probe.on('close', () => {
+      const duration = parseFloat(out.trim())
+      resolve(isNaN(duration) ? null : duration)
+    })
+    probe.on('error', () => resolve(null))
+  })
 })
 
 ipcMain.handle('get-favorites', async () => {
@@ -343,16 +517,17 @@ ipcMain.handle('move-file', async (event, sourcePath, targetDir) => {
 
 ipcMain.on('show-context-menu', (event, targetType, targetPath, isFavorite) => {
   const { Menu, shell, clipboard } = require('electron')
+  const isMac = process.platform === 'darwin'
   const template = []
 
   if (targetType === 'folder') {
     template.push({
-      label: '在檔案總管中開啟',
+      label: isMac ? '在 Finder 中開啟' : '在檔案總管中開啟',
       click: () => shell.openPath(targetPath)
     })
   } else if (targetType === 'video') {
     template.push({
-      label: '在檔案總管中定位檔案',
+      label: isMac ? '在 Finder 中定位檔案' : '在檔案總管中定位檔案',
       click: () => shell.showItemInFolder(targetPath)
     }, {
       label: '複製檔案路徑',
@@ -441,3 +616,106 @@ ipcMain.handle('choose-directory', async () => {
   }
   return null
 })
+
+// ── Subtitle IPC ──────────────────────────────────────────────────────────────
+
+const subtitleCacheDir = path.join(userDataPath, 'SubtitleCache')
+fs.mkdir(subtitleCacheDir, { recursive: true }).catch(console.error)
+
+/**
+ * Convert SRT content string to WebVTT string.
+ * Pure Node.js – no dependencies required.
+ */
+function srtToVtt(srt) {
+  const header = 'WEBVTT\n\n'
+  const body = srt
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    // Replace SRT timestamps  00:00:00,000 --> 00:00:00,000
+    //   with VTT timestamps   00:00:00.000 --> 00:00:00.000
+    .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
+  return header + body
+}
+
+/**
+ * Very basic ASS/SSA → VTT converter: strips formatting tags, keeps dialogue timing.
+ */
+function assToVtt(ass) {
+  const lines = ass.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  let vtt = 'WEBVTT\n\n'
+  let index = 1
+  for (const line of lines) {
+    if (!line.startsWith('Dialogue:')) continue
+    // Format: Dialogue: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+    const parts = line.split(',')
+    if (parts.length < 10) continue
+    const startRaw = parts[1].trim()  // H:MM:SS.cc
+    const endRaw   = parts[2].trim()
+    const text = parts.slice(9).join(',')
+      .replace(/\{[^}]*\}/g, '')       // strip {tags}
+      .replace(/\\N/g, '\n')           // line break
+      .trim()
+    if (!text) continue
+
+    const toVttTime = (t) => {
+      // H:MM:SS.cc → HH:MM:SS.ccc
+      const [h, m, sc] = t.split(':')
+      const [s, cs] = (sc || '0.0').split('.')
+      const ms = (parseInt(cs || 0) * 10).toString().padStart(3, '0')
+      return `${h.padStart(2,'0')}:${m.padStart(2,'0')}:${s.padStart(2,'0')}.${ms}`
+    }
+
+    vtt += `${index++}\n${toVttTime(startRaw)} --> ${toVttTime(endRaw)}\n${text}\n\n`
+  }
+  return vtt
+}
+
+ipcMain.handle('get-subtitles', async (event, videoPath) => {
+  const dir  = path.dirname(videoPath)
+  const base = path.basename(videoPath, path.extname(videoPath))
+
+  const candidates = [
+    { ext: '.vtt', convert: null },
+    { ext: '.srt', convert: srtToVtt },
+    { ext: '.ass', convert: assToVtt },
+    { ext: '.ssa', convert: assToVtt },
+  ]
+
+  for (const { ext, convert } of candidates) {
+    const subPath = path.join(dir, base + ext)
+    try {
+      await fs.access(subPath)
+
+      if (!convert) {
+        // Native VTT – serve directly
+        return { url: pathToFileURL(subPath).href, found: true }
+      }
+
+      // Convert and cache
+      const hash     = crypto.createHash('md5').update(subPath).digest('hex')
+      const cachePath = path.join(subtitleCacheDir, `${hash}.vtt`)
+
+      // Use cache if it exists and is newer than the source
+      let useCache = false
+      try {
+        const [cacheStat, srcStat] = await Promise.all([
+          fs.stat(cachePath),
+          fs.stat(subPath)
+        ])
+        useCache = cacheStat.mtimeMs >= srcStat.mtimeMs
+      } catch (_) {}
+
+      if (!useCache) {
+        const raw = await fs.readFile(subPath, 'utf-8')
+        await fs.writeFile(cachePath, convert(raw), 'utf-8')
+      }
+
+      return { url: pathToFileURL(cachePath).href, found: true }
+    } catch (_) {
+      // file not found – try next
+    }
+  }
+
+  return { found: false }
+})
+

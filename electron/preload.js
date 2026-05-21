@@ -23,21 +23,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPopoutData: (id) => ipcRenderer.invoke('get-popout-data', id),
   toggleAlwaysOnTop: (isTop) => ipcRenderer.invoke('toggle-always-on-top', isTop),
   windowMove: (dx, dy) => ipcRenderer.send('window-move', dx, dy),
-  // Helper to convert local path to media protocol url
+  getSubtitles: (videoPath) => ipcRenderer.invoke('get-subtitles', videoPath),
+  // Helper to convert local path to file:// or media:// URL (cross-platform)
   convertPathToMediaUrl: (absolutePath) => {
-    // Vite bundles 'url' polyfill which lacks pathToFileURL, so we format it manually
+    // Split on both forward and back slashes to handle Windows & macOS
     const parts = absolutePath.split(/[/\\]/);
     const encoded = parts.map(encodeURIComponent).join('/');
-    // Make sure to replace %3A back to : for the drive letter on Windows
+    // On Windows paths look like "C:\..." which becomes "C%3A/..." after split+encode;
+    // restore the colon so the URL is "file:///C:/..."
+    // On macOS paths start with "/" so parts[0] is empty, giving "/Users/..." — correct.
     let urlPath = encoded.replace('%3A', ':');
     if (!urlPath.startsWith('/')) {
       urlPath = '/' + urlPath;
     }
+    // Use custom media:// protocol for MKV/AVI/MOV/FLV so ffmpeg can transcode audio on-the-fly
+    const ext = absolutePath.split('.').pop().toLowerCase();
+    if (['mkv', 'avi', 'flv'].includes(ext)) {
+      return 'media://localhost' + urlPath;
+    }
     return 'file://' + urlPath;
   },
-  showContextMenu: (type, path, isFavorite) => ipcRenderer.send('show-context-menu', type, path, isFavorite),
+  showContextMenu: (targetType, targetPath, isFavorite) => ipcRenderer.send('show-context-menu', targetType, targetPath, isFavorite),
   onContextMenuAction: (callback) => {
     ipcRenderer.removeAllListeners('context-menu-action')
     ipcRenderer.on('context-menu-action', (event, action, path, type) => callback(action, path, type))
-  }
+  },
+  getVideoDuration: (filePath) => ipcRenderer.invoke('get-video-duration', filePath)
 })

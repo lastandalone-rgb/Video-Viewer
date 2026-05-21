@@ -2,7 +2,7 @@
 
 一款基於 **Electron + React** 打造的現代化本地影片管理播放器，支援多種瀏覽模式、資料夾樹狀管理、內建瀏覽器等豐富功能。
 
-![Platform](https://img.shields.io/badge/platform-Windows-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue)
 ![Electron](https://img.shields.io/badge/Electron-42.x-47848F?logo=electron)
 ![React](https://img.shields.io/badge/React-19.x-61DAFB?logo=react)
 ![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?logo=vite)
@@ -70,6 +70,7 @@
 
 ### 系統需求
 - Windows 10 / 11
+- macOS 10.15 (Catalina) 或更新版本，支援 Intel (x64) 與 Apple Silicon (arm64)
 - Node.js 18+
 
 ### 安裝與開發
@@ -89,10 +90,19 @@ npm run dev
 ### 打包為可執行檔
 
 ```bash
+# 打包 macOS（產生 .dmg 與 .zip，同時支援 x64 與 arm64）
+npm run build:mac
+
+# 打包 Windows（產生 portable .exe）
+npm run build:win
+
+# 同時打包兩個平台（需在對應平台或 CI 環境執行）
 npm run build
 ```
 
-打包完成後，執行檔位於 `release/VideoPlayer-win32-x64/VideoPlayer.exe`
+打包完成後：
+- macOS：`release/` 目錄下的 `.dmg`（Intel）與 `arm64.dmg`（Apple Silicon）
+- Windows：`release/VideoPlayer-win32-x64/VideoPlayer.exe`
 
 ---
 
@@ -148,7 +158,9 @@ video-viewer/
 - 我的最愛（影片、資料夾、書籤）
 - 內建瀏覽器（含網址列、書籤）
 - 全局狀態保留（切換頁面不重置）
-
+- 跨平台支援：自動偵測 macOS 環境下不支援的 MKV (AC3/DTS) 音訊，透過 ffmpeg 進行無縫即時轉碼串流播放
+- 完美支援轉碼串流影片的任意進度條拖曳快轉 (Seeking)
+- 智慧字幕載入：自動偵測並載入與影片同名的外掛字幕檔 (支援 SRT / VTT / ASS)
 ---
 
 ## 📄 授權

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Play, Pause, Maximize, SkipBack, SkipForward, Settings, Volume2, VolumeX, ArrowLeft, RotateCcw, FastForward, Rewind, Pin } from 'lucide-react'
+import { Play, Pause, Maximize, SkipBack, SkipForward, Settings, Volume2, VolumeX, ArrowLeft, RotateCcw, FastForward, Rewind, Pin, Captions } from 'lucide-react'
 
 export default function VideoPlayer({ 
   video, 
@@ -16,6 +16,8 @@ export default function VideoPlayer({
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [realDuration, setRealDuration] = useState(0)
+  const [seekOffset, setSeekOffset] = useState(0)
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
   const [showControls, setShowControls] = useState(true)
@@ -29,6 +31,11 @@ export default function VideoPlayer({
   
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(initialAlwaysOnTop)
   const [dragStart, setDragStart] = useState(null)
+
+  // Subtitle state
+  const [subtitleUrl, setSubtitleUrl] = useState(null)
+  const [subtitleEnabled, setSubtitleEnabled] = useState(true)
+  const trackRef = useRef(null)
   
   const controlsTimeoutRef = useRef(null)
 
@@ -36,6 +43,24 @@ export default function VideoPlayer({
     // Reset loop count when video changes
     setCurrentLoop(0)
     setIsPlaying(true)
+    setSeekOffset(0)
+    setRealDuration(0)
+    
+    if (video?.path && window.electronAPI?.getVideoDuration) {
+      window.electronAPI.getVideoDuration(video.path).then((dur) => {
+        if (dur) setRealDuration(dur)
+      }).catch(() => {})
+    }
+
+    // Auto-load subtitle for the new video
+    setSubtitleUrl(null)
+    if (video?.path && window.electronAPI?.getSubtitles) {
+      window.electronAPI.getSubtitles(video.path).then((result) => {
+        if (result?.found) {
+          setSubtitleUrl(result.url)
+        }
+      }).catch(() => {})
+    }
   }, [video])
 
   useEffect(() => {
@@ -131,8 +156,12 @@ export default function VideoPlayer({
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime)
-      setProgress((videoRef.current.currentTime / videoRef.current.duration) * 100)
+      const displayTime = seekOffset + videoRef.current.currentTime
+      setCurrentTime(displayTime)
+      const maxDur = realDuration || duration || videoRef.current.duration
+      if (maxDur && isFinite(maxDur)) {
+        setProgress((displayTime / maxDur) * 100)
+      }
     }
   }
 
@@ -144,18 +173,36 @@ export default function VideoPlayer({
     }
   }
 
+  const doSeek = (targetTime) => {
+    if (!videoRef.current) return
+    const maxDur = realDuration || duration || videoRef.current.duration
+    let finalTime = targetTime
+    if (finalTime < 0) finalTime = 0
+    if (maxDur && isFinite(maxDur) && finalTime > maxDur) finalTime = maxDur
+    
+    const isTranscodedStream = !isFinite(videoRef.current.duration)
+    
+    if (isTranscodedStream) {
+      // Transcoded stream: need to trigger a reload with ?seek=
+      setSeekOffset(finalTime)
+      // Playback will automatically resume because of autoPlay on <video>
+    } else {
+      // Native stream: just seek
+      videoRef.current.currentTime = finalTime
+    }
+  }
+
   const handleSeek = (e) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const pos = (e.clientX - rect.left) / rect.width
-    if (videoRef.current) {
-      videoRef.current.currentTime = pos * videoRef.current.duration
+    const maxDur = realDuration || duration || videoRef.current.duration
+    if (maxDur && isFinite(maxDur)) {
+      doSeek(pos * maxDur)
     }
   }
 
   const skip = (seconds) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime += seconds
-    }
+    doSeek(currentTime + seconds)
   }
 
   const handleEnded = () => {
@@ -233,9 +280,9 @@ export default function VideoPlayer({
       onDoubleClick={toggleFullscreen}
     >
       <video
-        key={video.path}
+        key={`${video.path}-${seekOffset}`}
         ref={videoRef}
-        src={window.electronAPI.convertPathToMediaUrl(video.path)}
+        src={window.electronAPI.convertPathToMediaUrl(video.path) + (seekOffset > 0 ? `?seek=${seekOffset}` : '')}
         className="video-element"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
@@ -245,7 +292,17 @@ export default function VideoPlayer({
         onMouseUp={handleVideoMouseUp}
         onMouseLeave={() => setDragStart(null)}
         autoPlay
-      />
+      >
+        {subtitleUrl && (
+          <track
+            ref={trackRef}
+            key={subtitleUrl}
+            kind="subtitles"
+            src={subtitleUrl}
+            default={subtitleEnabled}
+          />
+        )}
+      </video>
       
       <div className={`top-bar ${!showControls ? 'hidden' : ''}`}>
         <button className="control-btn" onClick={onClose}>
@@ -273,7 +330,7 @@ export default function VideoPlayer({
             <button className="control-btn" onClick={() => skip(10)}><FastForward size={20} /></button>
             
             <span className="time-display text-white">
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatTime(currentTime)} / {formatTime(realDuration || duration)}
             </span>
           </div>
 
@@ -339,6 +396,26 @@ export default function VideoPlayer({
             <button className="control-btn" onClick={toggleFullscreen}>
               <Maximize size={24} />
             </button>
+
+            {subtitleUrl && (
+              <button
+                className={`control-btn ${subtitleEnabled ? 'active-pin' : ''}`}
+                style={{ color: subtitleEnabled ? 'var(--accent-color)' : 'white' }}
+                title={subtitleEnabled ? '關閉字幕' : '開啟字幕'}
+                onClick={() => {
+                  const next = !subtitleEnabled
+                  setSubtitleEnabled(next)
+                  // Toggle all text tracks in the video element
+                  if (videoRef.current) {
+                    for (const t of videoRef.current.textTracks) {
+                      t.mode = next ? 'showing' : 'hidden'
+                    }
+                  }
+                }}
+              >
+                <Captions size={24} />
+              </button>
+            )}
             
             {isPopout && (
               <button 
