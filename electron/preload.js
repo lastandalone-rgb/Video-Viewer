@@ -48,5 +48,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('context-menu-action')
     ipcRenderer.on('context-menu-action', (event, action, path, type) => callback(action, path, type))
   },
-  getVideoDuration: (filePath) => ipcRenderer.invoke('get-video-duration', filePath)
+  getVideoDuration: (filePath) => ipcRenderer.invoke('get-video-duration', filePath),
+  scanHierarchyAll: (path) => ipcRenderer.invoke('scan-hierarchy-all', path),
+  batchRenameExt: (filePaths, newExt) => ipcRenderer.invoke('batch-rename-ext', filePaths, newExt),
+  extractArchive: (archivePaths, mode) => ipcRenderer.invoke('extract-archive', archivePaths, mode),
 })

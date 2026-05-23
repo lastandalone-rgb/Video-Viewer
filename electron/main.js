@@ -719,3 +719,100 @@ ipcMain.handle('get-subtitles', async (event, videoPath) => {
   return { found: false }
 })
 
+// ── File-Type Aware Hierarchy Scanner ────────────────────────────────────────
+
+const ALL_FILE_CATEGORIES = {
+  video:   new Set(['.mp4', '.mkv', '.webm', '.avi', '.mov', '.flv', '.wmv', '.m4v']),
+  audio:   new Set(['.mp3', '.aac', '.flac', '.wav', '.ogg', '.m4a', '.opus']),
+  image:   new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff']),
+  archive: new Set(['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.zst']),
+  doc:     new Set(['.pdf', '.txt', '.docx', '.doc', '.xlsx', '.pptx', '.md']),
+}
+
+function getFileCategory(ext) {
+  for (const [cat, exts] of Object.entries(ALL_FILE_CATEGORIES)) {
+    if (exts.has(ext)) return cat
+  }
+  return 'other'
+}
+
+ipcMain.handle('scan-hierarchy-all', async (event, dirPath) => {
+  let videos = [], folders = [], others = []
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name)
+      if (entry.isDirectory()) {
+        folders.push({ name: entry.name, path: fullPath })
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase()
+        try {
+          const stat = await fs.stat(fullPath)
+          const info = { name: entry.name, path: fullPath, size: stat.size, date: stat.mtimeMs, ext, category: getFileCategory(ext) }
+          if (VIDEO_EXTENSIONS.has(ext)) {
+            videos.push(info)
+          } else {
+            others.push(info)
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (err) {
+    console.error('scan-hierarchy-all error:', err)
+  }
+  return { videos, folders, others }
+})
+
+// ── Batch Rename Extension ────────────────────────────────────────────────────
+
+ipcMain.handle('batch-rename-ext', async (event, filePaths, newExt) => {
+  // Ensure newExt starts with a dot
+  if (!newExt.startsWith('.')) newExt = '.' + newExt
+  const results = []
+  for (const filePath of filePaths) {
+    const dir = path.dirname(filePath)
+    const base = path.basename(filePath, path.extname(filePath))
+    const newPath = path.join(dir, base + newExt)
+    try {
+      await fs.rename(filePath, newPath)
+      results.push({ success: true, from: filePath, to: newPath })
+    } catch (err) {
+      console.error('batch-rename-ext failed:', filePath, err.message)
+      results.push({ success: false, from: filePath, error: err.message })
+    }
+  }
+  return results
+})
+
+// ── Extract Archive via Bandizip ──────────────────────────────────────────────
+
+const BZ_PATH = 'C:\\Program Files\\Bandizip\\bz.exe'
+
+ipcMain.handle('extract-archive', async (event, archivePaths, mode) => {
+  // mode: 'here' = extract in same folder, 'subfolder' = each archive to its own subfolder
+  const results = []
+  for (const archivePath of archivePaths) {
+    const dir = path.dirname(archivePath)
+    const base = path.basename(archivePath, path.extname(archivePath))
+    const targetDir = mode === 'subfolder' ? path.join(dir, base) : dir
+    try {
+      await fs.mkdir(targetDir, { recursive: true })
+      await new Promise((resolve, reject) => {
+        const proc = spawn(BZ_PATH, ['x', '-aoa', `-o:${targetDir}`, archivePath], {
+          stdio: 'ignore',
+          windowsHide: true
+        })
+        proc.on('close', (code) => {
+          if (code === 0) resolve()
+          else reject(new Error(`bz.exe exited with code ${code}`))
+        })
+        proc.on('error', reject)
+      })
+      results.push({ success: true, archive: archivePath, targetDir })
+    } catch (err) {
+      console.error('extract-archive failed:', archivePath, err.message)
+      results.push({ success: false, archive: archivePath, error: err.message })
+    }
+  }
+  return { results }
+})

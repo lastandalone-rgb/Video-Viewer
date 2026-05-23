@@ -5,9 +5,9 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && electron-builder",
-    "build:win": "vite build && electron-builder --win",
-    "build:mac": "vite build && electron-builder --mac",
+    "build": "vite build && electron-packager . \"VideoPlayer\" --platform=win32 --arch=x64 --out=release --overwrite",
+    "build:win": "vite build && electron-packager . \"VideoPlayer\" --platform=win32 --arch=x64 --out=release --overwrite",
+    "build:electron": "vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run --mode test",

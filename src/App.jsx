@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Folder, FolderPlus, Trash2, PlayCircle, ArrowLeft, LayoutGrid, List, AlignJustify, MonitorPlay, ChevronDown, ChevronUp, Home, Settings, HardDrive, Menu, Heart, Globe, FolderTree, ArrowUp, ArrowRight, RotateCcw, Bookmark, ExternalLink } from 'lucide-react'
+import { Folder, FolderPlus, Trash2, PlayCircle, ArrowLeft, LayoutGrid, List, AlignJustify, MonitorPlay, ChevronDown, ChevronUp, Home, Settings, HardDrive, Menu, Heart, Globe, FolderTree, ArrowUp, ArrowRight, RotateCcw, Bookmark, ExternalLink, Filter, X, Archive, Film, Music, Image, FileText, File } from 'lucide-react'
 import VideoPlayer from './components/VideoPlayer'
 import Thumbnail from './components/Thumbnail'
 
@@ -78,6 +78,20 @@ export default function App() {
   // Popout mode state
   const [isPopoutMode, setIsPopoutMode] = useState(false)
   const [popoutData, setPopoutData] = useState(null)
+
+  // Hierarchy all-files mode state
+  const [allFiles, setAllFiles] = useState([])          // { videos, folders, others }
+  const [fileTypeFilter, setFileTypeFilter] = useState(new Set(['video'])) // active categories
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState(new Set())  // Set of file paths
+  const [selectionBox, setSelectionBox] = useState(null)         // { startX, startY, endX, endY }
+  const [selectionOrigin, setSelectionOrigin] = useState(null)
+  const [showRenameDialog, setShowRenameDialog] = useState(false)
+  const [newExtInput, setNewExtInput] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const fileCardRefs = useRef({})    // path -> DOM ref for intersection detection
+  const fileGridRef = useRef(null)
+  const [hierarchyCtxMenu, setHierarchyCtxMenu] = useState(null) // { x, y, file }
 
   // Browser state
   const webviewRef = useRef(null)
@@ -275,15 +289,19 @@ export default function App() {
     setViewMode(settings.defaultViewMode || 'grid')
     setPlayingIndex(-1)
     setCurrentPageIndex(0)
+    setSelectedFiles(new Set())
     
     setIsLoading(true)
     if (window.electronAPI) {
       if (folder.mode === 'hierarchy') {
-        const data = await window.electronAPI.scanHierarchy(targetPath)
+        // Always use scanHierarchyAll in hierarchy mode to support file type filter
+        const data = await window.electronAPI.scanHierarchyAll(targetPath)
         setVideos(data.videos)
         setSubfolders(data.folders)
+        setAllFiles(data)
       } else {
         setSubfolders([])
+        setAllFiles({})
         if (folderCache.has(targetPath)) {
           setVideos(folderCache.get(targetPath))
           window.electronAPI.scanFolder(targetPath).then(scannedVideos => {
@@ -309,6 +327,155 @@ export default function App() {
     }
     setIsLoading(false)
   }
+
+  // ── Computed filtered file list for hierarchy all-files mode ────────────────
+  const filteredAllFiles = React.useMemo(() => {
+    if (!allFiles.videos) return []
+    const showAll = fileTypeFilter.has('all')
+    let result = []
+    if (showAll || fileTypeFilter.has('video')) result = result.concat(allFiles.videos || [])
+    if ((showAll || fileTypeFilter.has('audio')) && allFiles.others) 
+      result = result.concat(allFiles.others.filter(f => f.category === 'audio'))
+    if ((showAll || fileTypeFilter.has('image')) && allFiles.others)
+      result = result.concat(allFiles.others.filter(f => f.category === 'image'))
+    if ((showAll || fileTypeFilter.has('archive')) && allFiles.others)
+      result = result.concat(allFiles.others.filter(f => f.category === 'archive'))
+    if ((showAll || fileTypeFilter.has('doc')) && allFiles.others)
+      result = result.concat(allFiles.others.filter(f => f.category === 'doc'))
+    if (fileTypeFilter.has('other') && allFiles.others)
+      result = result.concat(allFiles.others.filter(f => f.category === 'other'))
+    return result.sort((a, b) => a.name.localeCompare(b.name))
+  }, [allFiles, fileTypeFilter])
+
+  const toggleFileTypeFilter = (cat) => {
+    setFileTypeFilter(prev => {
+      const next = new Set(prev)
+      if (cat === 'all') {
+        return next.has('all') ? new Set(['video']) : new Set(['all'])
+      }
+      next.delete('all')
+      if (next.has(cat)) { next.delete(cat); if (next.size === 0) next.add('video') }
+      else next.add(cat)
+      return next
+    })
+  }
+
+  // ── Rubber-band selection ───────────────────────────────────────────────────
+  const handleGridMouseDown = (e) => {
+    // Only start selection on left click on empty area (not on a file card)
+    if (e.button !== 0) return
+    if (e.target.closest('.file-card') || e.target.closest('.collection-card')) return
+    setSelectionOrigin({ x: e.clientX, y: e.clientY })
+    setSelectionBox({ x: e.clientX, y: e.clientY, w: 0, h: 0 })
+    if (!e.ctrlKey && !e.metaKey) setSelectedFiles(new Set())
+  }
+
+  const handleGridMouseMove = (e) => {
+    if (!selectionOrigin) return
+    const x = Math.min(e.clientX, selectionOrigin.x)
+    const y = Math.min(e.clientY, selectionOrigin.y)
+    const w = Math.abs(e.clientX - selectionOrigin.x)
+    const h = Math.abs(e.clientY - selectionOrigin.y)
+    setSelectionBox({ x, y, w, h })
+
+    // Hit-test all file cards
+    const newSel = new Set()
+    for (const [fpath, el] of Object.entries(fileCardRefs.current)) {
+      if (!el) continue
+      const rect = el.getBoundingClientRect()
+      if (rect.left < x + w && rect.right > x && rect.top < y + h && rect.bottom > y) {
+        newSel.add(fpath)
+      }
+    }
+    setSelectedFiles(newSel)
+  }
+
+  const handleGridMouseUp = () => {
+    setSelectionOrigin(null)
+    setSelectionBox(null)
+  }
+
+  const toggleSelectFile = (e, fpath) => {
+    e.stopPropagation()
+    setSelectedFiles(prev => {
+      const next = new Set(prev)
+      if (e.ctrlKey || e.metaKey) {
+        if (next.has(fpath)) next.delete(fpath)
+        else next.add(fpath)
+      } else {
+        if (next.has(fpath) && next.size === 1) next.clear()
+        else { next.clear(); next.add(fpath) }
+      }
+      return next
+    })
+  }
+
+  // ── Batch rename extension ──────────────────────────────────────────────────
+  const handleBatchRenameExt = async () => {
+    if (!window.electronAPI || selectedFiles.size === 0) return
+    let ext = newExtInput.trim()
+    if (!ext) return
+    if (!ext.startsWith('.')) ext = '.' + ext
+    const results = await window.electronAPI.batchRenameExt([...selectedFiles], ext)
+    const succeeded = results.filter(r => r.success).length
+    setShowRenameDialog(false)
+    setNewExtInput('')
+    setSelectedFiles(new Set())
+    // Refresh
+    if (currentFolder) handleOpenFolder(currentFolder, currentSubFolderPath)
+    setToast({ message: `已重新命名 ${succeeded} 個檔案`, originalPath: '', newPath: '' })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  // ── Extract archive ─────────────────────────────────────────────────────────
+  const handleExtractArchive = async (mode, paths) => {
+    if (!window.electronAPI) return
+    const archivePaths = paths || [...selectedFiles].filter(p => {
+      const ext = p.split('.').pop().toLowerCase()
+      return ['zip','rar','7z','tar','gz','bz2','xz','zst'].includes(ext)
+    })
+    if (archivePaths.length === 0) return
+    setExtracting(true)
+    const result = await window.electronAPI.extractArchive(archivePaths, mode)
+    setExtracting(false)
+    const ok = result.results.filter(r => r.success).length
+    setToast({ message: `已解壓縮 ${ok} 個檔案`, originalPath: '', newPath: '' })
+    setTimeout(() => setToast(null), 4000)
+    // Refresh directory
+    if (currentFolder) handleOpenFolder(currentFolder, currentSubFolderPath)
+  }
+
+  // Esc key to clear selection
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') setSelectedFiles(new Set()) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  const CATEGORY_LABELS = {
+    video: { label: '影片', icon: <Film size={14} />, color: '#60a5fa' },
+    audio: { label: '音訊', icon: <Music size={14} />, color: '#c084fc' },
+    image: { label: '圖片', icon: <Image size={14} />, color: '#4ade80' },
+    archive: { label: '壓縮檔', icon: <Archive size={14} />, color: '#fbbf24' },
+    doc: { label: '文件', icon: <FileText size={14} />, color: '#fb923c' },
+    other: { label: '其他', icon: <File size={14} />, color: '#94a3b8' },
+  }
+
+  const ARCHIVE_EXTS = new Set(['.zip','.rar','.7z','.tar','.gz','.bz2','.xz','.zst'])
+
+  const isArchive = (p) => ARCHIVE_EXTS.has(('.' + p.split('.').pop()).toLowerCase())
+
+  const openHierarchyCtxMenu = (e, file) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // If right-clicking a file not in selection, make it the sole selection
+    if (!selectedFiles.has(file.path)) {
+      setSelectedFiles(new Set([file.path]))
+    }
+    setHierarchyCtxMenu({ x: e.clientX, y: e.clientY, file })
+  }
+
+  const closeHierarchyCtxMenu = () => setHierarchyCtxMenu(null)
 
   const handleToggleMode = async () => {
     if (!currentFolder || !window.electronAPI) return
@@ -657,32 +824,56 @@ export default function App() {
                     )}
                   </h1>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   <div className="view-toggles no-drag" style={{ background: 'var(--bg-card)' }}>
-                    <button 
-                      className={`view-btn ${currentFolder?.mode !== 'hierarchy' ? 'active' : ''}`} 
-                      onClick={handleToggleMode} 
-                      title="扁平模式"
-                    >
-                      扁平
-                    </button>
-                    <button 
-                      className={`view-btn ${currentFolder?.mode === 'hierarchy' ? 'active' : ''}`} 
-                      onClick={handleToggleMode} 
-                      title="樹狀模式"
-                    >
+                    <button className={`view-btn ${currentFolder?.mode !== 'hierarchy' ? 'active' : ''}`} onClick={handleToggleMode} title="扁平模式">扁平</button>
+                    <button className={`view-btn ${currentFolder?.mode === 'hierarchy' ? 'active' : ''}`} onClick={handleToggleMode} title="樹狀模式">
                       <FolderTree size={16} style={{ marginRight: 4 }}/> 樹狀
                     </button>
                   </div>
 
-                  <div className="view-toggles no-drag">
-                    <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => { setViewMode('grid'); setPlayingIndex(-1) }} title="網格顯示"><LayoutGrid size={18} /></button>
-                    <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => { setViewMode('list'); setPlayingIndex(-1) }} title="條列顯示"><List size={18} /></button>
-                    <button className={`view-btn ${viewMode === 'compact' ? 'active' : ''}`} onClick={() => { setViewMode('compact'); setPlayingIndex(-1) }} title="無縮圖清單"><AlignJustify size={18} /></button>
-                    <button className={`view-btn ${viewMode === 'theatre' ? 'active' : ''}`} onClick={() => setViewMode('theatre')} title="劇場模式"><MonitorPlay size={18} /></button>
-                  </div>
-                  <div style={{ color: 'var(--text-secondary)' }}>
-                    {sortedVideos.length} 部影片
+                  {currentFolder?.mode === 'hierarchy' && (
+                    <div className="filter-panel-wrapper no-drag">
+                      <button 
+                        className={`filter-toggle-btn ${fileTypeFilter.has('all') || fileTypeFilter.size > 1 || !fileTypeFilter.has('video') ? 'active' : ''}`}
+                        onClick={() => setShowFilterPanel(p => !p)}
+                      >
+                        <Filter size={14} /> 篩選類型
+                        {(fileTypeFilter.has('all') ? '全部' : [...fileTypeFilter].map(c => CATEGORY_LABELS[c]?.label).join(', '))}
+                      </button>
+                      {showFilterPanel && (
+                        <div className="filter-panel no-drag">
+                          <label><input type="checkbox" checked={fileTypeFilter.has('all')} onChange={() => toggleFileTypeFilter('all')} /> 全部檔案</label>
+                          <div className="filter-divider" />
+                          {Object.entries(CATEGORY_LABELS).map(([cat, { label, icon, color }]) => (
+                            <label key={cat}>
+                              <input type="checkbox" checked={fileTypeFilter.has('all') || fileTypeFilter.has(cat)} onChange={() => toggleFileTypeFilter(cat)} />
+                              <span style={{ color }}>{icon}</span> {label}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {currentFolder?.mode !== 'hierarchy' && (
+                    <div className="view-toggles no-drag">
+                      <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => { setViewMode('grid'); setPlayingIndex(-1) }} title="網格"><LayoutGrid size={18} /></button>
+                      <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => { setViewMode('list'); setPlayingIndex(-1) }} title="條列"><List size={18} /></button>
+                      <button className={`view-btn ${viewMode === 'compact' ? 'active' : ''}`} onClick={() => { setViewMode('compact'); setPlayingIndex(-1) }} title="清單"><AlignJustify size={18} /></button>
+                      <button className={`view-btn ${viewMode === 'theatre' ? 'active' : ''}`} onClick={() => setViewMode('theatre')} title="劇場"><MonitorPlay size={18} /></button>
+                    </div>
+                  )}
+
+                  {selectedFiles.size > 0 && (
+                    <div className="selection-badge no-drag">
+                      已選 {selectedFiles.size} 個
+                      <button className="clear-btn" onClick={() => setSelectedFiles(new Set())}><X size={12} /></button>
+                    </div>
+                  )}
+
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                    {currentFolder?.mode === 'hierarchy' ? `${filteredAllFiles.length} 個檔案` : `${sortedVideos.length} 部影片`}
                   </div>
                 </div>
               </header>
@@ -766,22 +957,85 @@ export default function App() {
                           </tbody>
                         </table>
                       </div>
-                    ) : (
-                      <>
-                        {currentFolder?.mode === 'hierarchy' && subfolders.length > 0 && (
+                    ) : currentFolder?.mode === 'hierarchy' ? (
+                      // ── Hierarchy mode: all-file-types grid with rubber-band selection ──
+                      <div
+                        ref={fileGridRef}
+                        style={{ padding: '16px', userSelect: 'none' }}
+                        onMouseDown={handleGridMouseDown}
+                        onMouseMove={handleGridMouseMove}
+                        onMouseUp={handleGridMouseUp}
+                      >
+                        {subfolders.length > 0 && (
                           <div style={{ marginBottom: '24px' }}>
-                            <h3 style={{ fontSize: '1rem', color: '#94a3b8', marginBottom: '16px' }}>子資料夾</h3>
+                            <h3 style={{ fontSize: '1rem', color: '#94a3b8', marginBottom: '12px' }}>子資料夾</h3>
                             <div className="collection-grid">
                               {subfolders.map(sf => (
-                                <CollectionCard 
-                                  key={sf.path} folder={sf} 
-                                  onClick={() => handleOpenFolder(currentFolder, sf.path)} 
+                                <CollectionCard key={sf.path} folder={sf}
+                                  onClick={() => handleOpenFolder(currentFolder, sf.path)}
                                   onDrop={(e) => handleDropToFolder(e, sf)}
                                 />
                               ))}
                             </div>
                           </div>
                         )}
+                        {filteredAllFiles.length > 0 && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+                            {filteredAllFiles.map(file => {
+                              const isSelected = selectedFiles.has(file.path)
+                              const cat = file.category || 'other'
+                              const extLabel = file.ext?.replace('.','').toUpperCase() || ''
+                              const isVideo = cat === 'video'
+                              return isVideo ? (
+                                // ── Video: show thumbnail card (same style as flat mode) ──
+                                <div
+                                  key={file.path}
+                                  ref={el => fileCardRefs.current[file.path] = el}
+                                  className={`card ${isSelected ? 'selected' : ''}`}
+                                  style={{ cursor: 'pointer', outline: isSelected ? '2px solid var(--accent-color)' : 'none', outlineOffset: '2px' }}
+                                  onClick={(e) => {
+                                    if (e.ctrlKey || e.metaKey) { toggleSelectFile(e, file.path); return }
+                                    const vi = (allFiles.videos || []).findIndex(v => v.path === file.path)
+                                    if (vi !== -1) handlePlayVideo(vi)
+                                  }}
+                                  onContextMenu={(e) => openHierarchyCtxMenu(e, file)}
+                                  draggable="true"
+                                  onDragStart={(e) => handleDragStart(e, file.path)}
+                                >
+                                  <Thumbnail videoPath={file.path} />
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <PlayCircle size={18} className="icon" />
+                                    <h3 title={file.name} style={{ fontSize: '0.82rem' }}>{file.name}</h3>
+                                  </div>
+                                  {isSelected && <div style={{ position: 'absolute', top: 6, right: 6, background: 'var(--accent-color)', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: 'white' }}>✓</div>}
+                                </div>
+                              ) : (
+                                // ── Non-video: compact file card ──
+                                <div
+                                  key={file.path}
+                                  ref={el => fileCardRefs.current[file.path] = el}
+                                  className={`file-card ${isSelected ? 'selected' : ''}`}
+                                  onClick={(e) => toggleSelectFile(e, file.path)}
+                                  onContextMenu={(e) => openHierarchyCtxMenu(e, file)}
+                                >
+                                  <div className={`file-icon cat-${cat}`}>{extLabel}</div>
+                                  <div className="file-info">
+                                    <div className="file-name" title={file.name}>{file.name}</div>
+                                    <div className="file-meta">{formatSize(file.size)} · {formatDate(file.date)}</div>
+                                  </div>
+                                  {isSelected && <div style={{ color: 'var(--accent-color)', flexShrink: 0 }}>✓</div>}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {filteredAllFiles.length === 0 && subfolders.length === 0 && (
+                          <div className="empty-state"><File size={48} opacity={0.3} /><p>此資料夾沒有符合篩選條件的檔案</p></div>
+                        )}
+                      </div>
+                    ) : (
+                      // ── Flat mode: original video grid ──
+                      <>
                         <div className={viewMode === 'grid' ? 'grid' : 'list-view'}>
                           {paginatedVideos.map((vid, index) => {
                             const actualIndex = (viewMode === 'grid' && settings.gridItemsPerPage && settings.gridItemsPerPage !== 'all') 
@@ -805,7 +1059,6 @@ export default function App() {
                             )
                           })}
                         </div>
-                        
                         {viewMode === 'grid' && totalPages > 1 && (
                           <div className="pagination-controls no-drag">
                             <button className="btn" disabled={currentPageIndex === 0} onClick={() => setCurrentPageIndex(p => p - 1)}>上一頁</button>
@@ -819,6 +1072,86 @@ export default function App() {
                 </main>
               )}
           </div>
+
+          {/* ── Batch Rename Extension Dialog ── */}
+          {showRenameDialog && (
+            <div className="modal-backdrop" onClick={() => setShowRenameDialog(false)}>
+              <div className="rename-dialog" onClick={e => e.stopPropagation()}>
+                <h3>批量重命名副檔名</h3>
+                <p>已選取 {selectedFiles.size} 個檔案，請輸入新的副檔名（例如 <code>.mkv</code>）</p>
+                <input
+                  className="ext-input"
+                  autoFocus
+                  placeholder=".mkv"
+                  value={newExtInput}
+                  onChange={e => setNewExtInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleBatchRenameExt(); if (e.key === 'Escape') setShowRenameDialog(false) }}
+                />
+                <div className="dialog-actions">
+                  <button className="btn" onClick={() => setShowRenameDialog(false)}>取消</button>
+                  <button className="btn primary" onClick={handleBatchRenameExt}>確認重命名</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Extracting overlay ── */}
+          {extracting && (
+            <div className="modal-backdrop">
+              <div style={{ color: 'white', textAlign: 'center' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '12px' }}>⏳</div>
+                <p>解壓縮中，請稍候...</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Rubber-band selection box ── */}
+          {selectionBox && selectionBox.w > 4 && selectionBox.h > 4 && (
+            <div className="selection-box" style={{
+              left: selectionBox.x, top: selectionBox.y,
+              width: selectionBox.w, height: selectionBox.h
+            }} />
+          )}
+
+          {/* ── Hierarchy Right-Click Context Menu ── */}
+          {hierarchyCtxMenu && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 399 }} onClick={closeHierarchyCtxMenu} onContextMenu={e => { e.preventDefault(); closeHierarchyCtxMenu() }} />
+              <div
+                className="hierarchy-ctx-menu"
+                style={{ left: hierarchyCtxMenu.x, top: hierarchyCtxMenu.y }}
+                onClick={closeHierarchyCtxMenu}
+              >
+                {hierarchyCtxMenu.file.category === 'video' && (
+                  <>
+                    <button onClick={() => { const vi = (allFiles.videos||[]).findIndex(v=>v.path===hierarchyCtxMenu.file.path); if(vi!==-1) handlePlayVideo(vi) }}>▶ 播放影片</button>
+                    <button onClick={() => window.electronAPI?.showContextMenu('video', hierarchyCtxMenu.file.path, favorites.some(f=>f.path===hierarchyCtxMenu.file.path))}>在檔案總管中定位</button>
+                    <div className="ctx-divider" />
+                  </>
+                )}
+                {isArchive(hierarchyCtxMenu.file.path) && (
+                  <>
+                    <button onClick={() => handleExtractArchive('here', [...selectedFiles].filter(isArchive))}>📦 解壓縮到此處</button>
+                    <button onClick={() => handleExtractArchive('subfolder', [...selectedFiles].filter(isArchive))}>📁 解壓縮到各別資料夾</button>
+                    <div className="ctx-divider" />
+                  </>
+                )}
+                <button onClick={() => { setShowRenameDialog(true) }}>✏️ 重命名副檔名 ({selectedFiles.size} 個)</button>
+                <div className="ctx-divider" />
+                {hierarchyCtxMenu.file.category === 'video' && (
+                  <button onClick={() => {
+                    const isFav = favorites.some(f => f.path === hierarchyCtxMenu.file.path)
+                    if (isFav) {
+                      window.electronAPI.removeFavorite(hierarchyCtxMenu.file.path).then(setFavorites)
+                    } else {
+                      window.electronAPI.addFavorite({ path: hierarchyCtxMenu.file.path, name: hierarchyCtxMenu.file.name, type: 'video' }).then(setFavorites)
+                    }
+                  }}>{favorites.some(f=>f.path===hierarchyCtxMenu.file.path) ? '💔 移除最愛' : '❤️ 加入最愛'}</button>
+                )}
+                <button onClick={() => { navigator.clipboard?.writeText(hierarchyCtxMenu.file.path) }}>📋 複製路徑</button>
+              </div>
+            </>
+          )}
 
           <div style={{ display: currentPage === 'home' && !currentFolder ? 'flex' : 'none', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
               <header className="header">
