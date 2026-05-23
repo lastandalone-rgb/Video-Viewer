@@ -788,31 +788,80 @@ ipcMain.handle('batch-rename-ext', async (event, filePaths, newExt) => {
 
 const BZ_PATH = 'C:\\Program Files\\Bandizip\\bz.exe'
 
-ipcMain.handle('extract-archive', async (event, archivePaths, mode) => {
-  // mode: 'here' = extract in same folder, 'subfolder' = each archive to its own subfolder
-  const results = []
-  for (const archivePath of archivePaths) {
-    const dir = path.dirname(archivePath)
-    const base = path.basename(archivePath, path.extname(archivePath))
-    const targetDir = mode === 'subfolder' ? path.join(dir, base) : dir
-    try {
-      await fs.mkdir(targetDir, { recursive: true })
-      await new Promise((resolve, reject) => {
-        const proc = spawn(BZ_PATH, ['x', '-aoa', `-o:${targetDir}`, archivePath], {
-          stdio: 'ignore',
-          windowsHide: true
-        })
-        proc.on('close', (code) => {
-          if (code === 0) resolve()
-          else reject(new Error(`bz.exe exited with code ${code}`))
-        })
-        proc.on('error', reject)
-      })
-      results.push({ success: true, archive: archivePath, targetDir })
-    } catch (err) {
-      console.error('extract-archive failed:', archivePath, err.message)
-      results.push({ success: false, archive: archivePath, error: err.message })
-    }
+ipcMain.handle('extract-archive', async (event, archivePaths, mode, password) => {
+  // Returns immediately; progress is pushed via 'extract-progress' events
+  const id = Date.now().toString()
+
+  const sendProgress = (archive, data) => {
+    try { event.sender.send('extract-progress', { id, archive, ...data }) } catch (_) {}
   }
-  return { results }
+
+  setImmediate(async () => {
+    for (const archivePath of archivePaths) {
+      const dir  = path.dirname(archivePath)
+      const base = path.basename(archivePath, path.extname(archivePath))
+      const targetDir = mode === 'subfolder' ? path.join(dir, base) : dir
+
+      sendProgress(archivePath, { targetDir, extracted: 0, total: 0, percent: 0, current: '準備中…', done: false, error: null })
+
+      try {
+        await fs.mkdir(targetDir, { recursive: true })
+
+        // ── Step 1: count total files via `bz l` ──────────────────────────
+        const total = await new Promise((resolve) => {
+          const lproc = spawn(BZ_PATH, ['l', archivePath], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+          let out = ''
+          lproc.stdout.on('data', d => out += d.toString())
+          lproc.on('close', () => {
+            // Each file entry line starts with a date: 2023-01-01 ...
+            const count = out.split('\n').filter(l => /^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(l.trim())).length
+            resolve(count || 0)
+          })
+          lproc.on('error', () => resolve(0))
+        })
+
+        sendProgress(archivePath, { targetDir, extracted: 0, total, percent: 0, current: '開始解壓縮…', done: false, error: null })
+
+        // ── Step 2: extract with progress ─────────────────────────────────
+        let extracted = 0
+        let exitCode  = 0
+        let stderrText = ''
+
+        const args = ['x', '-aoa', `-o:${targetDir}`]
+        if (password) args.push(`-p:${password}`)
+        args.push(archivePath)
+
+        await new Promise((resolve) => {
+          const proc = spawn(BZ_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+          proc.stderr.on('data', d => stderrText += d.toString())
+          proc.stdout.on('data', (chunk) => {
+            const lines = chunk.toString().split(/\r?\n/)
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed) continue
+              extracted++
+              const percent = total > 0 ? Math.min(99, Math.round((extracted / total) * 100)) : -1
+              sendProgress(archivePath, { targetDir, extracted, total, percent, current: trimmed, done: false, error: null })
+            }
+          })
+          proc.on('close', code => { exitCode = code; resolve() })
+          proc.on('error', () => { exitCode = -1; resolve() })
+        })
+
+        // ── Step 3: report result ──────────────────────────────────────────
+        let error = null
+        if (exitCode !== 0) {
+          const combined = (stderrText + '').toLowerCase()
+          error = (combined.includes('password') || combined.includes('wrong')) ? 'wrong_password' : 'extract_failed'
+        }
+        sendProgress(archivePath, { targetDir, extracted, total, percent: exitCode === 0 ? 100 : -1, current: '', done: true, error })
+
+      } catch (err) {
+        console.error('extract-archive failed:', archivePath, err.message)
+        sendProgress(archivePath, { targetDir, extracted: 0, total: 0, percent: -1, current: '', done: true, error: err.message })
+      }
+    }
+  })
+
+  return { started: true, id }
 })

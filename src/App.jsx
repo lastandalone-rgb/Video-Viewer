@@ -54,6 +54,60 @@ function CollectionCard({ folder, onClick, onRemove, onContextMenu, onDragOver, 
   )
 }
 
+function ExtractDialog({ archivePaths, defaultMode, onConfirm, onCancel }) {
+  const [mode, setMode] = useState(defaultMode || 'subfolder')
+  const [password, setPassword] = useState('')
+  const [showPwd, setShowPwd] = useState(false)
+  const names = archivePaths.map(p => p.split(/[/\\]/).pop())
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="rename-dialog" style={{ width: 420 }} onClick={e => e.stopPropagation()}>
+        <h3>📦 解壓縮設定</h3>
+        <p style={{ marginBottom: 12 }}>
+          {names.length === 1 ? names[0] : `${names.length} 個壓縮檔`}
+        </p>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 8 }}>解壓縮模式</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 8, color: 'white', fontSize: '0.9rem' }}>
+            <input type="radio" name="exmode" value="here" checked={mode === 'here'} onChange={() => setMode('here')} style={{ accentColor: 'var(--accent-color)' }} />
+            解壓縮到此處
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: 'white', fontSize: '0.9rem' }}>
+            <input type="radio" name="exmode" value="subfolder" checked={mode === 'subfolder'} onChange={() => setMode('subfolder')} style={{ accentColor: 'var(--accent-color)' }} />
+            解壓縮到各別獨立資料夾
+          </label>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 6 }}>壓縮檔密碼（選填）</div>
+          <div style={{ position: 'relative' }}>
+            <input
+              className="ext-input"
+              type={showPwd ? 'text' : 'password'}
+              placeholder="無密碼請留空"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onConfirm(mode, password || undefined) }}
+              style={{ paddingRight: 40, marginBottom: 0 }}
+              autoFocus
+            />
+            <button
+              onClick={() => setShowPwd(s => !s)}
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem' }}
+            >{showPwd ? '🙈' : '👁️'}</button>
+          </div>
+        </div>
+
+        <div className="dialog-actions">
+          <button className="btn" onClick={onCancel}>取消</button>
+          <button className="btn primary" onClick={() => onConfirm(mode, password || undefined)}>開始解壓縮</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [currentPage, setCurrentPage] = useState('home') // 'home' | 'settings'
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -91,7 +145,12 @@ export default function App() {
   const [extracting, setExtracting] = useState(false)
   const fileCardRefs = useRef({})    // path -> DOM ref for intersection detection
   const fileGridRef = useRef(null)
+  const isDraggingRef = useRef(false) // true while rubber-band drag is active
   const [hierarchyCtxMenu, setHierarchyCtxMenu] = useState(null) // { x, y, file }
+
+  // Extract progress state (non-blocking)
+  const [extractQueue, setExtractQueue] = useState([])  // [{ id, archive, percent, current, done, error, targetDir }]
+  const [extractDialog, setExtractDialog] = useState(null) // { archivePaths, mode } — for password input
 
   // Browser state
   const webviewRef = useRef(null)
@@ -360,22 +419,31 @@ export default function App() {
     })
   }
 
-  // ── Rubber-band selection ───────────────────────────────────────────────────
+  // ── Rubber-band selection (works from anywhere in grid) ───────────────────
+  const DRAG_THRESHOLD = 6
+
   const handleGridMouseDown = (e) => {
-    // Only start selection on left click on empty area (not on a file card)
     if (e.button !== 0) return
-    if (e.target.closest('.file-card') || e.target.closest('.collection-card')) return
-    setSelectionOrigin({ x: e.clientX, y: e.clientY })
-    setSelectionBox({ x: e.clientX, y: e.clientY, w: 0, h: 0 })
-    if (!e.ctrlKey && !e.metaKey) setSelectedFiles(new Set())
+    isDraggingRef.current = false
+    setSelectionOrigin({ x: e.clientX, y: e.clientY, ctrl: e.ctrlKey || e.metaKey })
   }
 
   const handleGridMouseMove = (e) => {
     if (!selectionOrigin) return
+    const dx = e.clientX - selectionOrigin.x
+    const dy = e.clientY - selectionOrigin.y
+    if (!isDraggingRef.current && Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return
+
+    // Activate rubber-band on first move past threshold
+    if (!isDraggingRef.current) {
+      isDraggingRef.current = true
+      if (!selectionOrigin.ctrl) setSelectedFiles(new Set())
+    }
+
     const x = Math.min(e.clientX, selectionOrigin.x)
     const y = Math.min(e.clientY, selectionOrigin.y)
-    const w = Math.abs(e.clientX - selectionOrigin.x)
-    const h = Math.abs(e.clientY - selectionOrigin.y)
+    const w = Math.abs(dx)
+    const h = Math.abs(dy)
     setSelectionBox({ x, y, w, h })
 
     // Hit-test all file cards
@@ -387,12 +455,17 @@ export default function App() {
         newSel.add(fpath)
       }
     }
-    setSelectedFiles(newSel)
+    if (!selectionOrigin.ctrl) {
+      setSelectedFiles(newSel)
+    } else {
+      setSelectedFiles(prev => { const n = new Set(prev); newSel.forEach(p => n.add(p)); return n })
+    }
   }
 
   const handleGridMouseUp = () => {
     setSelectionOrigin(null)
     setSelectionBox(null)
+    // isDraggingRef.current stays true until next mousedown (suppresses card onClick)
   }
 
   const toggleSelectFile = (e, fpath) => {
@@ -427,23 +500,46 @@ export default function App() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  // ── Extract archive ─────────────────────────────────────────────────────────
-  const handleExtractArchive = async (mode, paths) => {
-    if (!window.electronAPI) return
-    const archivePaths = paths || [...selectedFiles].filter(p => {
-      const ext = p.split('.').pop().toLowerCase()
-      return ['zip','rar','7z','tar','gz','bz2','xz','zst'].includes(ext)
-    })
-    if (archivePaths.length === 0) return
-    setExtracting(true)
-    const result = await window.electronAPI.extractArchive(archivePaths, mode)
-    setExtracting(false)
-    const ok = result.results.filter(r => r.success).length
-    setToast({ message: `已解壓縮 ${ok} 個檔案`, originalPath: '', newPath: '' })
-    setTimeout(() => setToast(null), 4000)
-    // Refresh directory
-    if (currentFolder) handleOpenFolder(currentFolder, currentSubFolderPath)
+  // ── Extract archive (non-blocking, shows progress panel) ───────────────────
+  const startExtract = (archivePaths, mode, password) => {
+    if (!window.electronAPI || archivePaths.length === 0) return
+    window.electronAPI.extractArchive(archivePaths, mode, password)
+    // Progress events handled in useEffect below
   }
+
+  const handleExtractArchive = (mode, paths) => {
+    const archivePaths = paths || [...selectedFiles].filter(isArchive)
+    if (archivePaths.length === 0) return
+    // Show password dialog before extracting
+    setExtractDialog({ archivePaths, mode })
+  }
+
+  // Listen to progress events from main process
+  useEffect(() => {
+    if (!window.electronAPI?.onExtractProgress) return
+    window.electronAPI.onExtractProgress((data) => {
+      setExtractQueue(prev => {
+        const idx = prev.findIndex(q => q.id === data.id && q.archive === data.archive)
+        const entry = { id: data.id, archive: data.archive, targetDir: data.targetDir,
+          percent: data.percent, current: data.current, total: data.total, extracted: data.extracted,
+          done: data.done, error: data.error }
+        if (idx >= 0) {
+          const next = [...prev]; next[idx] = entry; return next
+        }
+        return [...prev, entry]
+      })
+      // Auto-refresh directory when an archive finishes successfully
+      if (data.done && !data.error && currentFolder) {
+        handleOpenFolder(currentFolder, currentSubFolderPath)
+      }
+      // Auto-dismiss done items after 5s
+      if (data.done) {
+        setTimeout(() => {
+          setExtractQueue(prev => prev.filter(q => !(q.id === data.id && q.archive === data.archive && q.done)))
+        }, 5000)
+      }
+    })
+  }, [currentFolder, currentSubFolderPath])
 
   // Esc key to clear selection
   useEffect(() => {
@@ -994,6 +1090,7 @@ export default function App() {
                                   className={`card ${isSelected ? 'selected' : ''}`}
                                   style={{ cursor: 'pointer', outline: isSelected ? '2px solid var(--accent-color)' : 'none', outlineOffset: '2px' }}
                                   onClick={(e) => {
+                                    if (isDraggingRef.current) return // was a drag, not a click
                                     if (e.ctrlKey || e.metaKey) { toggleSelectFile(e, file.path); return }
                                     const vi = (allFiles.videos || []).findIndex(v => v.path === file.path)
                                     if (vi !== -1) handlePlayVideo(vi)
@@ -1015,7 +1112,7 @@ export default function App() {
                                   key={file.path}
                                   ref={el => fileCardRefs.current[file.path] = el}
                                   className={`file-card ${isSelected ? 'selected' : ''}`}
-                                  onClick={(e) => toggleSelectFile(e, file.path)}
+                                  onClick={(e) => { if (isDraggingRef.current) return; toggleSelectFile(e, file.path) }}
                                   onContextMenu={(e) => openHierarchyCtxMenu(e, file)}
                                 >
                                   <div className={`file-icon cat-${cat}`}>{extLabel}</div>
@@ -1113,7 +1210,65 @@ export default function App() {
             }} />
           )}
 
-          {/* ── Hierarchy Right-Click Context Menu ── */}
+          {/* ── Extract Password + Mode Dialog ── */}
+          {extractDialog && (
+            <ExtractDialog
+              archivePaths={extractDialog.archivePaths}
+              defaultMode={extractDialog.mode}
+              onConfirm={(mode, password) => {
+                setExtractDialog(null)
+                startExtract(extractDialog.archivePaths, mode, password)
+              }}
+              onCancel={() => setExtractDialog(null)}
+            />
+          )}
+
+          {/* ── Extract Progress Panel (non-blocking) ── */}
+          {extractQueue.length > 0 && (
+            <div className="extract-progress-panel">
+              <div className="extract-panel-header">
+                <span>📦 解壓縮{extractQueue.some(q=>!q.done) ? '中' : '完成'}</span>
+                {extractQueue.every(q => q.done) && (
+                  <button className="clear-btn" onClick={() => setExtractQueue([])}><X size={14}/></button>
+                )}
+              </div>
+              {extractQueue.map((q, i) => {
+                const archiveName = q.archive.split(/[/\\]/).pop()
+                return (
+                  <div key={i} className="extract-item">
+                    <div className="extract-item-name" title={q.archive}>{archiveName}</div>
+                    {q.done ? (
+                      q.error ? (
+                        <div className="extract-error">
+                          {q.error === 'wrong_password' ? '❌ 密碼錯誤，請重試' : '❌ 解壓縮失敗'}
+                          {q.error === 'wrong_password' && (
+                            <button className="btn" style={{marginLeft:8,padding:'2px 8px',fontSize:'0.75rem'}}
+                              onClick={() => setExtractDialog({ archivePaths: [q.archive], mode: 'here' })}>重試</button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="extract-success">✅ 完成！{q.total > 0 ? ` (${q.total} 個檔案)` : ''}</div>
+                      )
+                    ) : (
+                      <>
+                        <div className="extract-progress-track">
+                          <div
+                            className={`extract-progress-fill ${q.percent < 0 ? 'indeterminate' : ''}`}
+                            style={{ width: q.percent >= 0 ? `${q.percent}%` : '100%' }}
+                          />
+                        </div>
+                        <div className="extract-item-status">
+                          {q.percent >= 0 ? `${q.percent}%` : ''}
+                          {q.total > 0 ? ` (${q.extracted}/${q.total})` : ''}
+                        </div>
+                        {q.current && <div className="extract-current" title={q.current}>{q.current}</div>}
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
           {hierarchyCtxMenu && (
             <>
               <div style={{ position: 'fixed', inset: 0, zIndex: 399 }} onClick={closeHierarchyCtxMenu} onContextMenu={e => { e.preventDefault(); closeHierarchyCtxMenu() }} />
