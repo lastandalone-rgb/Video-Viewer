@@ -4,8 +4,8 @@ import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [
+export default defineConfig(({ mode }) => ({
+  plugins: mode === 'test' ? [react()] : [
     react(),
     electron([
       {
@@ -23,4 +23,13 @@ export default defineConfig({
     ]),
     renderer(),
   ],
-})
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.js'],
+    include: ['src/test/**/*.test.{js,jsx}'],
+    coverage: {
+      reporter: ['text', 'json', 'html'],
+    },
+  },
+}))
