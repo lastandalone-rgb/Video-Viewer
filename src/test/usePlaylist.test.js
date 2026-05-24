@@ -22,7 +22,7 @@ describe('usePlaylist Hook', () => {
     
     // Boundary end without loop
     act(() => { result.current.next(); });
-    expect(result.current.currentIndex).toBe(-1); // Resets when out of bounds and no loop
+    expect(result.current.currentIndex).toBe(-1);
 
     // Set index to start
     act(() => { result.current.setListAndIndex([1, 2, 3], 0); });
@@ -42,5 +42,32 @@ describe('usePlaylist Hook', () => {
     // Loop around to end
     act(() => { result.current.prev(); });
     expect(result.current.currentIndex).toBe(2);
+  });
+
+  it('ignores next and prev when playlist is empty', () => {
+    const { result } = renderHook(() => usePlaylist([], -1));
+    act(() => { result.current.next(); });
+    expect(result.current.currentIndex).toBe(-1);
+
+    act(() => { result.current.prev(); });
+    expect(result.current.currentIndex).toBe(-1);
+  });
+
+  it('closes by resetting index to -1', () => {
+    const { result } = renderHook(() => usePlaylist([1, 2], 0));
+    act(() => { result.current.close(); });
+    expect(result.current.currentIndex).toBe(-1);
+  });
+
+  it('allows overriding loop parameter per call', () => {
+    const { result } = renderHook(() => usePlaylist([1, 2], 1, false));
+    
+    // Force loop on next
+    act(() => { result.current.next(true); });
+    expect(result.current.currentIndex).toBe(0);
+
+    // Force loop on prev
+    act(() => { result.current.prev(true); });
+    expect(result.current.currentIndex).toBe(1);
   });
 });
