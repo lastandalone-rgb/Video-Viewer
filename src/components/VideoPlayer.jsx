@@ -112,6 +112,8 @@ export default function VideoPlayer({
         return
       }
 
+      const skipSeconds = currentProps.settings?.skipSeconds || 10
+
       switch (e.key) {
         case ' ':
           e.preventDefault()
@@ -119,11 +121,11 @@ export default function VideoPlayer({
           break
         case 'ArrowRight':
           e.preventDefault()
-          skip(10)
+          skip(skipSeconds)
           break
         case 'ArrowLeft':
           e.preventDefault()
-          skip(-10)
+          skip(-skipSeconds)
           break
         case 'ArrowUp':
           e.preventDefault()
@@ -376,13 +378,13 @@ export default function VideoPlayer({
 
         <div className="controls-row">
           <div className="controls-group">
-            <button className="control-btn" onClick={() => skip(-10)}><Rewind size={20} /></button>
+            <button className="control-btn" onClick={() => skip(-(settings?.skipSeconds || 10))}><Rewind size={20} /></button>
             <button className="control-btn" onClick={onPrev}><SkipBack size={24} /></button>
             <button className="control-btn" onClick={togglePlay}>
               {isPlaying ? <Pause size={32} /> : <Play size={32} />}
             </button>
             <button className="control-btn" onClick={onNext}><SkipForward size={24} /></button>
-            <button className="control-btn" onClick={() => skip(10)}><FastForward size={20} /></button>
+            <button className="control-btn" onClick={() => skip(settings?.skipSeconds || 10)}><FastForward size={20} /></button>
             
             <span className="time-display text-white">
               {formatTime(currentTime)} / {formatTime(realDuration || duration)}

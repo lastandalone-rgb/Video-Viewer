@@ -123,7 +123,7 @@ export default function App() {
   const [toast, setToast] = useState(null)
   
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' })
-  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' } })
+  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10 })
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   
   const [favorites, setFavorites] = useState([])
@@ -953,6 +953,25 @@ export default function App() {
                         }}
                       />
                     </div>
+                  </div>
+                </div>
+
+                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  <h3>影片快進 / 倒退秒數</h3>
+                  <p className="settings-desc">設定使用鍵盤方向鍵 (左右) 或播放器按鈕時，每次快進與倒退的秒數。</p>
+                  <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
+                    <select 
+                      className="view-btn active" 
+                      style={{ padding: '8px 16px', appearance: 'auto' }}
+                      value={settings.skipSeconds || 10}
+                      onChange={(e) => saveSettings({ skipSeconds: parseInt(e.target.value, 10) })}
+                    >
+                      <option value={5} style={{ color: 'black' }}>5 秒</option>
+                      <option value={10} style={{ color: 'black' }}>10 秒</option>
+                      <option value={15} style={{ color: 'black' }}>15 秒</option>
+                      <option value={30} style={{ color: 'black' }}>30 秒</option>
+                      <option value={60} style={{ color: 'black' }}>60 秒</option>
+                    </select>
                   </div>
                 </div>
               </div>
