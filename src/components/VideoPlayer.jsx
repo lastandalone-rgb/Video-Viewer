@@ -95,8 +95,6 @@ export default function VideoPlayer({
       // Don't intercept if user is typing in an input
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
 
-      wakeUpControls()
-
       // Handle custom shortcuts for prev/next
       const currentProps = latestProps.current
       const prevKey = currentProps.settings?.shortcuts?.prev || 'a'
