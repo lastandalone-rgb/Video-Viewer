@@ -109,7 +109,7 @@ export default function Thumbnail({ videoPath }) {
         <img src={thumbUrl} alt="Thumbnail" />
       ) : isInView ? (
         <>
-          <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666'}}>Loading...</div>
+          <div className="skeleton-thumb"></div>
           <video 
             ref={videoRef}
             src={window.electronAPI.convertPathToMediaUrl(videoPath)} 

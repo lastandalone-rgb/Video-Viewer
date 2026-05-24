@@ -123,11 +123,10 @@ export default function App() {
   
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' })
   const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com' })
+  const [currentPageIndex, setCurrentPageIndex] = useState(0)
+  const [jumpPageInput, setJumpPageInput] = useState('')
   
   const [favorites, setFavorites] = useState([])
-  
-  // Pagination state
-  const [currentPageIndex, setCurrentPageIndex] = useState(0)
   
   // Popout mode state
   const [isPopoutMode, setIsPopoutMode] = useState(false)
@@ -658,17 +657,35 @@ export default function App() {
     }
   }
 
-  const paginatedVideos = React.useMemo(() => {
-    if (viewMode !== 'grid' || !settings.gridItemsPerPage || settings.gridItemsPerPage === 'all') {
-      return sortedVideos
+  const currentDataSource = currentFolder?.mode === 'hierarchy' ? filteredAllFiles : sortedVideos;
+  
+  const paginatedItems = React.useMemo(() => {
+    if (!settings.gridItemsPerPage || settings.gridItemsPerPage === 'all') {
+      return currentDataSource
     }
     const start = currentPageIndex * settings.gridItemsPerPage
-    return sortedVideos.slice(start, start + settings.gridItemsPerPage)
-  }, [sortedVideos, viewMode, settings.gridItemsPerPage, currentPageIndex])
+    return currentDataSource.slice(start, start + settings.gridItemsPerPage)
+  }, [currentDataSource, viewMode, settings.gridItemsPerPage, currentPageIndex])
 
   const totalPages = settings.gridItemsPerPage && settings.gridItemsPerPage !== 'all'
-    ? Math.ceil(sortedVideos.length / settings.gridItemsPerPage)
+    ? Math.ceil(currentDataSource.length / settings.gridItemsPerPage)
     : 1
+
+  const getPageNumbers = () => {
+    const pages = []
+    if (totalPages <= 7) {
+      for (let i = 0; i < totalPages; i++) pages.push(i)
+    } else {
+      if (currentPageIndex <= 3) {
+        pages.push(0, 1, 2, 3, 4, '...', totalPages - 1)
+      } else if (currentPageIndex >= totalPages - 4) {
+        pages.push(0, '...', totalPages - 5, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1)
+      } else {
+        pages.push(0, '...', currentPageIndex - 1, currentPageIndex, currentPageIndex + 1, '...', totalPages - 1)
+      }
+    }
+    return pages
+  }
 
   const formatSize = (bytes) => {
     if (!bytes) return '--'
@@ -858,11 +875,27 @@ export default function App() {
                 <div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>網格模式分頁數量</h3>
                   <p className="settings-desc">設定網格模式下每頁載入的影片數量，減少卡頓</p>
-                  <div className="view-toggles" style={{ marginTop: '16px', background: 'rgba(0,0,0,0.2)' }}>
+                  <div className="view-toggles" style={{ marginTop: '16px', background: 'rgba(0,0,0,0.2)', flexWrap: 'wrap' }}>
+                    <button className={`view-btn ${settings.gridItemsPerPage === 8 ? 'active' : ''}`} onClick={() => saveSettings({ gridItemsPerPage: 8 })}>8 筆</button>
+                    <button className={`view-btn ${settings.gridItemsPerPage === 16 ? 'active' : ''}`} onClick={() => saveSettings({ gridItemsPerPage: 16 })}>16 筆</button>
                     <button className={`view-btn ${settings.gridItemsPerPage === 24 ? 'active' : ''}`} onClick={() => saveSettings({ gridItemsPerPage: 24 })}>24 筆</button>
-                    <button className={`view-btn ${settings.gridItemsPerPage === 48 || !settings.gridItemsPerPage ? 'active' : ''}`} onClick={() => saveSettings({ gridItemsPerPage: 48 })}>48 筆</button>
+                    <button className={`view-btn ${settings.gridItemsPerPage === 48 || (!settings.gridItemsPerPage && settings.gridItemsPerPage !== 'all') ? 'active' : ''}`} onClick={() => saveSettings({ gridItemsPerPage: 48 })}>48 筆</button>
                     <button className={`view-btn ${settings.gridItemsPerPage === 96 ? 'active' : ''}`} onClick={() => saveSettings({ gridItemsPerPage: 96 })}>96 筆</button>
                     <button className={`view-btn ${settings.gridItemsPerPage === 'all' ? 'active' : ''}`} onClick={() => saveSettings({ gridItemsPerPage: 'all' })}>全部載入</button>
+                    <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px', padding: '4px' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginRight: '8px' }}>自訂:</span>
+                      <input 
+                        type="number" 
+                        min="1"
+                        style={{ width: '70px', padding: '4px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
+                        value={![8, 16, 24, 48, 96, 'all'].includes(settings.gridItemsPerPage) ? (settings.gridItemsPerPage || '') : ''}
+                        placeholder="數量"
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          if (!isNaN(val) && val > 0) saveSettings({ gridItemsPerPage: val });
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -952,14 +985,12 @@ export default function App() {
                     </div>
                   )}
 
-                  {currentFolder?.mode !== 'hierarchy' && (
-                    <div className="view-toggles no-drag">
+                  <div className="view-toggles no-drag">
                       <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => { setViewMode('grid'); setPlayingIndex(-1) }} title="網格"><LayoutGrid size={18} /></button>
                       <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => { setViewMode('list'); setPlayingIndex(-1) }} title="條列"><List size={18} /></button>
                       <button className={`view-btn ${viewMode === 'compact' ? 'active' : ''}`} onClick={() => { setViewMode('compact'); setPlayingIndex(-1) }} title="清單"><AlignJustify size={18} /></button>
                       <button className={`view-btn ${viewMode === 'theatre' ? 'active' : ''}`} onClick={() => setViewMode('theatre')} title="劇場"><MonitorPlay size={18} /></button>
                     </div>
-                  )}
 
                   {selectedFiles.size > 0 && (
                     <div className="selection-badge no-drag">
@@ -1011,7 +1042,7 @@ export default function App() {
                   ) : (
                     viewMode === 'compact' ? (
                       <div className="data-table-container">
-                        {currentFolder?.mode === 'hierarchy' && subfolders.length > 0 && (
+                        {currentFolder?.mode === 'hierarchy' && subfolders.length > 0 && currentPageIndex === 0 && (
                           <div style={{ marginBottom: '16px' }}>
                             <h3 style={{ fontSize: '1rem', color: '#94a3b8', marginBottom: '8px' }}>子資料夾</h3>
                             <div className="collection-grid">
@@ -1034,35 +1065,50 @@ export default function App() {
                             </tr>
                           </thead>
                           <tbody>
-                            {sortedVideos.map((vid, index) => (
-                              <tr 
-                                key={vid.path}
-                                onClick={() => handlePlayVideo(index)}
-                                onContextMenu={(e) => handleContextMenu(e, 'video', vid.path)}
-                              >
-                                <td>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <PlayCircle size={16} style={{ color: 'var(--accent-color)' }} />
-                                    {vid.name}
-                                  </div>
-                                </td>
-                                <td>{formatDate(vid.date)}</td>
-                                <td>{formatSize(vid.size)}</td>
-                              </tr>
-                            ))}
+                            {paginatedItems.map((file, index) => {
+                              const isVideo = currentFolder?.mode === 'hierarchy' ? (file.category === 'video') : true;
+                              const actualIndex = (settings.gridItemsPerPage && settings.gridItemsPerPage !== 'all') 
+                                ? (currentPageIndex * settings.gridItemsPerPage) + index : index;
+                              
+                              return (
+                                <tr 
+                                  key={file.path}
+                                  onClick={(e) => {
+                                    if (currentFolder?.mode === 'hierarchy') {
+                                      if (e.ctrlKey || e.metaKey) { toggleSelectFile(e, file.path); return }
+                                    }
+                                    if (isVideo) {
+                                      const sourceArray = currentFolder?.mode === 'hierarchy' ? (allFiles.videos || []) : sortedVideos;
+                                      const vi = sourceArray.findIndex(v => v.path === file.path);
+                                      if (vi !== -1) handlePlayVideo(vi);
+                                    }
+                                  }}
+                                  onContextMenu={(e) => currentFolder?.mode === 'hierarchy' ? openHierarchyCtxMenu(e, file) : handleContextMenu(e, 'video', file.path)}
+                                  style={{ background: selectedFiles.has(file.path) ? 'rgba(59, 130, 246, 0.2)' : '' }}
+                                >
+                                  <td>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      {isVideo ? <PlayCircle size={16} style={{ color: 'var(--accent-color)' }} /> : <File size={16} style={{ color: '#94a3b8' }} />}
+                                      {file.name}
+                                    </div>
+                                  </td>
+                                  <td>{formatDate(file.date)}</td>
+                                  <td>{formatSize(file.size)}</td>
+                                </tr>
+                              )
+                            })}
                           </tbody>
                         </table>
                       </div>
-                    ) : currentFolder?.mode === 'hierarchy' ? (
-                      // ── Hierarchy mode: all-file-types grid with rubber-band selection ──
+                    ) : (
                       <div
-                        ref={fileGridRef}
-                        style={{ padding: '16px', userSelect: 'none' }}
-                        onMouseDown={handleGridMouseDown}
-                        onMouseMove={handleGridMouseMove}
-                        onMouseUp={handleGridMouseUp}
+                        ref={currentFolder?.mode === 'hierarchy' ? fileGridRef : null}
+                        style={{ padding: '16px', userSelect: currentFolder?.mode === 'hierarchy' ? 'none' : 'auto' }}
+                        onMouseDown={currentFolder?.mode === 'hierarchy' ? handleGridMouseDown : undefined}
+                        onMouseMove={currentFolder?.mode === 'hierarchy' ? handleGridMouseMove : undefined}
+                        onMouseUp={currentFolder?.mode === 'hierarchy' ? handleGridMouseUp : undefined}
                       >
-                        {subfolders.length > 0 && (
+                        {currentFolder?.mode === 'hierarchy' && subfolders.length > 0 && currentPageIndex === 0 && (
                           <div style={{ marginBottom: '24px' }}>
                             <h3 style={{ fontSize: '1rem', color: '#94a3b8', marginBottom: '12px' }}>子資料夾</h3>
                             <div className="collection-grid">
@@ -1075,96 +1121,112 @@ export default function App() {
                             </div>
                           </div>
                         )}
-                        {filteredAllFiles.length > 0 && (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
-                            {filteredAllFiles.map(file => {
-                              const isSelected = selectedFiles.has(file.path)
-                              const cat = file.category || 'other'
-                              const extLabel = file.ext?.replace('.','').toUpperCase() || ''
-                              const isVideo = cat === 'video'
-                              return isVideo ? (
-                                // ── Video: show thumbnail card (same style as flat mode) ──
-                                <div
-                                  key={file.path}
-                                  ref={el => fileCardRefs.current[file.path] = el}
-                                  className={`card ${isSelected ? 'selected' : ''}`}
-                                  style={{ cursor: 'pointer', outline: isSelected ? '2px solid var(--accent-color)' : 'none', outlineOffset: '2px' }}
-                                  onClick={(e) => {
-                                    if (isDraggingRef.current) return // was a drag, not a click
-                                    if (e.ctrlKey || e.metaKey) { toggleSelectFile(e, file.path); return }
-                                    const vi = (allFiles.videos || []).findIndex(v => v.path === file.path)
-                                    if (vi !== -1) handlePlayVideo(vi)
-                                  }}
-                                  onContextMenu={(e) => openHierarchyCtxMenu(e, file)}
-                                  draggable="true"
-                                  onDragStart={(e) => handleDragStart(e, file.path)}
-                                >
-                                  <Thumbnail videoPath={file.path} />
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <PlayCircle size={18} className="icon" />
-                                    <h3 title={file.name} style={{ fontSize: '0.82rem' }}>{file.name}</h3>
+                        
+                        {paginatedItems.length > 0 && (
+                          <div className={viewMode === 'list' ? 'list-view' : 'grid'} style={currentFolder?.mode === 'hierarchy' && viewMode === 'grid' ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' } : {}}>
+                            {paginatedItems.map((file, index) => {
+                              const isSelected = selectedFiles.has(file.path);
+                              const isVideo = currentFolder?.mode === 'hierarchy' ? (file.category === 'video') : true;
+                              const actualIndex = (settings.gridItemsPerPage && settings.gridItemsPerPage !== 'all') 
+                                ? (currentPageIndex * settings.gridItemsPerPage) + index : index;
+
+                              if (isVideo) {
+                                return (
+                                  <div
+                                    key={file.path}
+                                    ref={el => { if (currentFolder?.mode === 'hierarchy') fileCardRefs.current[file.path] = el }}
+                                    className={`card ${isSelected ? 'selected' : ''}`}
+                                    style={{ cursor: 'pointer', outline: isSelected ? '2px solid var(--accent-color)' : 'none', outlineOffset: '2px' }}
+                                    onClick={(e) => {
+                                      if (currentFolder?.mode === 'hierarchy') {
+                                        if (isDraggingRef.current) return;
+                                        if (e.ctrlKey || e.metaKey) { toggleSelectFile(e, file.path); return }
+                                        const vi = (allFiles.videos || []).findIndex(v => v.path === file.path);
+                                        if (vi !== -1) handlePlayVideo(vi);
+                                      } else {
+                                        handlePlayVideo(actualIndex);
+                                      }
+                                    }}
+                                    onContextMenu={(e) => currentFolder?.mode === 'hierarchy' ? openHierarchyCtxMenu(e, file) : handleContextMenu(e, 'video', file.path)}
+                                    draggable="true"
+                                    onDragStart={(e) => handleDragStart(e, file.path)}
+                                  >
+                                    <Thumbnail videoPath={file.path} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <PlayCircle size={18} className="icon" />
+                                      <h3 title={file.name} style={currentFolder?.mode === 'hierarchy' ? { fontSize: '0.82rem' } : {}}>{file.name}</h3>
+                                    </div>
+                                    {isSelected && <div style={{ position: 'absolute', top: 6, right: 6, background: 'var(--accent-color)', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: 'white' }}>✓</div>}
                                   </div>
-                                  {isSelected && <div style={{ position: 'absolute', top: 6, right: 6, background: 'var(--accent-color)', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: 'white' }}>✓</div>}
-                                </div>
-                              ) : (
-                                // ── Non-video: compact file card ──
-                                <div
-                                  key={file.path}
-                                  ref={el => fileCardRefs.current[file.path] = el}
-                                  className={`file-card ${isSelected ? 'selected' : ''}`}
-                                  onClick={(e) => { if (isDraggingRef.current) return; toggleSelectFile(e, file.path) }}
-                                  onContextMenu={(e) => openHierarchyCtxMenu(e, file)}
-                                >
-                                  <div className={`file-icon cat-${cat}`}>{extLabel}</div>
-                                  <div className="file-info">
-                                    <div className="file-name" title={file.name}>{file.name}</div>
-                                    <div className="file-meta">{formatSize(file.size)} · {formatDate(file.date)}</div>
+                                )
+                              } else {
+                                const extLabel = file.ext?.replace('.','').toUpperCase() || '';
+                                return (
+                                  <div
+                                    key={file.path}
+                                    ref={el => { if (currentFolder?.mode === 'hierarchy') fileCardRefs.current[file.path] = el }}
+                                    className={`file-card ${isSelected ? 'selected' : ''}`}
+                                    onClick={(e) => { if (isDraggingRef.current) return; toggleSelectFile(e, file.path) }}
+                                    onContextMenu={(e) => openHierarchyCtxMenu(e, file)}
+                                  >
+                                    <div className={`file-icon cat-${file.category || 'other'}`}>{extLabel}</div>
+                                    <div className="file-info">
+                                      <div className="file-name" title={file.name}>{file.name}</div>
+                                      <div className="file-meta">{formatSize(file.size)} &middot; {formatDate(file.date)}</div>
+                                    </div>
+                                    {isSelected && <div style={{ color: 'var(--accent-color)', flexShrink: 0 }}>✓</div>}
                                   </div>
-                                  {isSelected && <div style={{ color: 'var(--accent-color)', flexShrink: 0 }}>✓</div>}
-                                </div>
-                              )
+                                )
+                              }
                             })}
                           </div>
                         )}
-                        {filteredAllFiles.length === 0 && subfolders.length === 0 && (
+                        {paginatedItems.length === 0 && subfolders.length === 0 && (
                           <div className="empty-state"><File size={48} opacity={0.3} /><p>此資料夾沒有符合篩選條件的檔案</p></div>
                         )}
                       </div>
-                    ) : (
-                      // ── Flat mode: original video grid ──
-                      <>
-                        <div className={viewMode === 'grid' ? 'grid' : 'list-view'}>
-                          {paginatedVideos.map((vid, index) => {
-                            const actualIndex = (viewMode === 'grid' && settings.gridItemsPerPage && settings.gridItemsPerPage !== 'all') 
-                              ? (currentPageIndex * settings.gridItemsPerPage) + index 
-                              : index;
-                            return (
-                              <div 
-                                key={vid.path} 
-                                className="card" 
-                                onClick={() => handlePlayVideo(actualIndex)}
-                                onContextMenu={(e) => handleContextMenu(e, 'video', vid.path)}
-                                draggable="true"
-                                onDragStart={(e) => handleDragStart(e, vid.path)}
-                              >
-                                <Thumbnail videoPath={vid.path} />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <PlayCircle size={18} className="icon" />
-                                  <h3 title={vid.name}>{vid.name}</h3>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                        {viewMode === 'grid' && totalPages > 1 && (
-                          <div className="pagination-controls no-drag">
-                            <button className="btn" disabled={currentPageIndex === 0} onClick={() => setCurrentPageIndex(p => p - 1)}>上一頁</button>
-                            <span style={{ color: 'var(--text-secondary)' }}>第 {currentPageIndex + 1} 頁 / 共 {totalPages} 頁</span>
-                            <button className="btn" disabled={currentPageIndex === totalPages - 1} onClick={() => setCurrentPageIndex(p => p + 1)}>下一頁</button>
-                          </div>
-                        )}
-                      </>
                     )
+                  )}
+                  
+                  {totalPages > 1 && (
+                    <div className="pagination-controls no-drag">
+                      <button className="btn" style={{ padding: '8px 12px' }} disabled={currentPageIndex === 0} onClick={() => setCurrentPageIndex(p => p - 1)}>&lt;</button>
+                      {getPageNumbers().map((page, idx) => (
+                        page === '...' ? (
+                          <span key={`ellipsis-${idx}`} style={{ color: 'var(--text-secondary)', padding: '0 4px' }}>...</span>
+                        ) : (
+                          <button
+                            key={page}
+                            className={`btn ${currentPageIndex === page ? 'active' : ''}`}
+                            style={{ padding: '8px 14px' }}
+                            onClick={() => setCurrentPageIndex(page)}
+                          >
+                            {page + 1}
+                          </button>
+                        )
+                      ))}
+                      <button className="btn" style={{ padding: '8px 12px' }} disabled={currentPageIndex === totalPages - 1} onClick={() => setCurrentPageIndex(p => p + 1)}>&gt;</button>
+                      <div style={{ display: 'flex', alignItems: 'center', marginLeft: '16px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginRight: '8px' }}>跳轉:</span>
+                        <input 
+                          type="number" 
+                          min="1" max={totalPages}
+                          style={{ width: '60px', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
+                          value={jumpPageInput}
+                          placeholder={currentPageIndex + 1}
+                          onChange={e => setJumpPageInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              const page = parseInt(jumpPageInput)
+                              if (!isNaN(page) && page >= 1 && page <= totalPages) {
+                                setCurrentPageIndex(page - 1)
+                                setJumpPageInput('')
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
                   )}
                 </main>
               )}
