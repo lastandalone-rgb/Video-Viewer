@@ -6,6 +6,8 @@ import fsSync from 'fs'
 import crypto from 'crypto'
 import { spawn, execSync } from 'child_process'
 
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+
 // Detect if ffmpeg is available on the system
 function findFfmpeg() {
   const candidates = [

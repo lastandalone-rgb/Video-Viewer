@@ -335,6 +335,10 @@ export default function VideoPlayer({
     }
   }
 
+  if (!video) {
+    return <div style={{ color: 'white', padding: 20 }}>No video selected</div>
+  }
+
   return (
     <div 
       className={isEmbedded ? "player-embedded" : "player-overlay"} 

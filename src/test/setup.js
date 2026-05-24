@@ -1,55 +1,29 @@
 import '@testing-library/jest-dom'
+import { vi } from 'vitest'
 
-// Mock Electron API globally
+// Mock Electron API
 window.electronAPI = {
-  getCollections: vi.fn().mockResolvedValue([]),
-  addCollection: vi.fn().mockResolvedValue([]),
-  removeCollection: vi.fn().mockResolvedValue([]),
-  updateCollection: vi.fn().mockResolvedValue([]),
-  getFavorites: vi.fn().mockResolvedValue([]),
-  addFavorite: vi.fn().mockResolvedValue([]),
-  removeFavorite: vi.fn().mockResolvedValue([]),
-  scanFolder: vi.fn().mockResolvedValue([]),
-  scanHierarchy: vi.fn().mockResolvedValue({ videos: [], folders: [] }),
-  moveFile: vi.fn().mockResolvedValue({ success: true, newPath: '' }),
-  getFolderCache: vi.fn().mockResolvedValue(null),
-  getThumbnail: vi.fn().mockResolvedValue(null),
-  saveThumbnail: vi.fn().mockResolvedValue(null),
-  showContextMenu: vi.fn(),
-  processDrop: vi.fn().mockResolvedValue({ type: 'unknown' }),
-  getSettings: vi.fn().mockResolvedValue({}),
-  saveSettings: vi.fn().mockResolvedValue({}),
-  chooseDirectory: vi.fn().mockResolvedValue(null),
-  openPopoutPlayer: vi.fn().mockResolvedValue(null),
-  getPopoutData: vi.fn().mockResolvedValue(null),
-  toggleAlwaysOnTop: vi.fn().mockResolvedValue(null),
+  convertPathToMediaUrl: vi.fn((path) => `file://${path}`),
+  getVideoDuration: vi.fn().mockResolvedValue(100),
+  getSubtitles: vi.fn().mockResolvedValue([]),
+  saveSettings: vi.fn().mockResolvedValue(),
+  openPopoutPlayer: vi.fn(),
+  getPopoutData: vi.fn(),
+  toggleAlwaysOnTop: vi.fn(),
   windowMove: vi.fn(),
-  getVideoDuration: vi.fn().mockResolvedValue(null),
-  getSubtitles: vi.fn().mockResolvedValue({ found: false }),
+  showContextMenu: vi.fn(),
   onContextMenuAction: vi.fn(),
-  convertPathToMediaUrl: vi.fn((p) => `file:///${p.replace(/\\/g, '/')}`),
+  scanHierarchyAll: vi.fn(),
+  batchRenameExt: vi.fn(),
+  extractArchive: vi.fn(),
+  onExtractProgress: vi.fn()
 }
 
-// Mock requestFullscreen
-Object.defineProperty(document.documentElement, 'requestFullscreen', {
-  value: vi.fn().mockResolvedValue(undefined),
-  writable: true,
-})
-Object.defineProperty(document, 'exitFullscreen', {
-  value: vi.fn().mockResolvedValue(undefined),
-  writable: true,
-})
+// Mock HTMLMediaElement methods
+window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue()
+window.HTMLMediaElement.prototype.pause = vi.fn()
+window.HTMLMediaElement.prototype.load = vi.fn()
 
-// Mock HTMLMediaElement playback methods (jsdom doesn't support them)
-Object.defineProperty(window.HTMLMediaElement.prototype, 'play', {
-  value: vi.fn().mockResolvedValue(undefined),
-  writable: true,
-})
-Object.defineProperty(window.HTMLMediaElement.prototype, 'pause', {
-  value: vi.fn(),
-  writable: true,
-})
-Object.defineProperty(window.HTMLMediaElement.prototype, 'load', {
-  value: vi.fn(),
-  writable: true,
-})
+// Mock document methods for fullscreen
+document.exitFullscreen = vi.fn().mockResolvedValue()
+document.documentElement.requestFullscreen = vi.fn().mockResolvedValue()

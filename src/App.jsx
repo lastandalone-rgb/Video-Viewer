@@ -724,7 +724,8 @@ export default function App() {
         window.electronAPI.openPopoutPlayer({
           playingIndex: index,
           playlist: sortedVideos.length > 0 ? sortedVideos : videos,
-          alwaysOnTop: settings.defaultAlwaysOnTop
+          alwaysOnTop: settings.defaultAlwaysOnTop,
+          settings: settings
         })
       }
     } else {
@@ -737,7 +738,7 @@ export default function App() {
   if (isPopoutMode) {
     if (!popoutData) return <div style={{ color: 'white', padding: 20 }}>載入中...</div>
     
-    const { playingIndex: pIndex, playlist, alwaysOnTop } = popoutData
+    const { playingIndex: pIndex, playlist, alwaysOnTop, settings: popoutSettings } = popoutData
     return (
       <div style={{ width: '100vw', height: '100vh', background: 'black' }}>
         <VideoPlayer 
@@ -756,7 +757,7 @@ export default function App() {
           }}
           isPopout={true}
           initialAlwaysOnTop={alwaysOnTop}
-          settings={settings}
+          settings={popoutSettings || {}}
         />
       </div>
     )
