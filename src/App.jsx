@@ -131,6 +131,8 @@ export default function App() {
   // Popout mode state
   const [isPopoutMode, setIsPopoutMode] = useState(false)
   const [popoutData, setPopoutData] = useState(null)
+  
+  const theatreRibbonRef = useRef(null)
 
   // Hierarchy all-files mode state
   const [allFiles, setAllFiles] = useState([])          // { videos, folders, others }
@@ -546,6 +548,16 @@ export default function App() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
+
+  // Auto-scroll theatre ribbon to center the active video
+  useEffect(() => {
+    if (viewMode === 'theatre' && theatreRibbonRef.current) {
+      const activeItem = theatreRibbonRef.current.querySelector('.ribbon-card.active')
+      if (activeItem) {
+        activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+      }
+    }
+  }, [playingIndex, viewMode])
 
   const CATEGORY_LABELS = {
     video: { label: '影片', icon: <Film size={14} />, color: '#60a5fa' },
@@ -1041,7 +1053,11 @@ export default function App() {
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#666' }}>無影片可播放</div>
                     )}
                   </div>
-                  <div className="theatre-playlist-ribbon scrollable-x no-drag" onWheel={handleRibbonWheel}>
+                  <div 
+                    ref={theatreRibbonRef}
+                    className="theatre-playlist-ribbon scrollable-x no-drag" 
+                    onWheel={handleRibbonWheel}
+                  >
                     {sortedVideos.map((vid, index) => (
                       <div 
                         key={vid.path} 
