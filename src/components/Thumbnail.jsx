@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react'
 
 const thumbnailCache = new Map()
 
-export default function Thumbnail({ videoPath }) {
-  const [thumbUrl, setThumbUrl] = useState(thumbnailCache.get(videoPath) || null)
+export default function Thumbnail({ mediaPath, type = 'video' }) {
+  const [thumbUrl, setThumbUrl] = useState(thumbnailCache.get(mediaPath) || null)
   const [error, setError] = useState(false)
-  const [isInView, setIsInView] = useState(!!thumbnailCache.get(videoPath))
+  const [isInView, setIsInView] = useState(!!thumbnailCache.get(mediaPath) || type === 'image')
   
   const containerRef = useRef(null)
   const videoRef = useRef(null)
@@ -38,6 +38,13 @@ export default function Thumbnail({ videoPath }) {
 
     let isMounted = true
 
+    if (type === 'image') {
+      const url = window.electronAPI.convertPathToMediaUrl(mediaPath)
+      thumbnailCache.set(mediaPath, url)
+      setThumbUrl(url)
+      return
+    }
+
     const extractFromVideo = () => {
       const v = videoRef.current
       if (!v) return
@@ -57,8 +64,8 @@ export default function Thumbnail({ videoPath }) {
         
         try {
           const dataUrl = canvas.toDataURL('image/jpeg', 0.5) // Compresses slightly for memory
-          thumbnailCache.set(videoPath, dataUrl)
-          if (window.electronAPI) window.electronAPI.saveThumbnail(videoPath, dataUrl)
+          thumbnailCache.set(mediaPath, dataUrl)
+          if (window.electronAPI) window.electronAPI.saveThumbnail(mediaPath, dataUrl)
           if (isMounted) setThumbUrl(dataUrl)
         } catch (e) {
           if (isMounted) setError(true)
@@ -83,10 +90,10 @@ export default function Thumbnail({ videoPath }) {
     }
 
     if (window.electronAPI) {
-      window.electronAPI.getThumbnail(videoPath).then(diskUrl => {
+      window.electronAPI.getThumbnail(mediaPath).then(diskUrl => {
         if (!isMounted) return
         if (diskUrl) {
-          thumbnailCache.set(videoPath, diskUrl)
+          thumbnailCache.set(mediaPath, diskUrl)
           setThumbUrl(diskUrl)
         } else {
           extractFromVideo()
@@ -99,7 +106,7 @@ export default function Thumbnail({ videoPath }) {
     return () => {
       isMounted = false
     }
-  }, [videoPath, isInView, thumbUrl, error])
+  }, [mediaPath, isInView, thumbUrl, error, type])
 
   return (
     <div className="thumbnail-container" ref={containerRef}>
@@ -110,14 +117,18 @@ export default function Thumbnail({ videoPath }) {
       ) : isInView ? (
         <>
           <div className="skeleton-thumb"></div>
-          <video 
-            ref={videoRef}
-            src={window.electronAPI.convertPathToMediaUrl(videoPath)} 
-            style={{ display: 'none' }}
-            preload="metadata"
-            muted
-          />
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
+          {type === 'video' && (
+            <>
+              <video 
+                ref={videoRef}
+                src={window.electronAPI.convertPathToMediaUrl(mediaPath)} 
+                style={{ display: 'none' }}
+                preload="metadata"
+                muted
+              />
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
+            </>
+          )}
         </>
       ) : (
         <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#444'}}>...</div>

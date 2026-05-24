@@ -42,6 +42,22 @@ export default function VideoPlayer({
   
   const controlsTimeoutRef = useRef(null)
 
+  const isImage = video?.type === 'image'
+
+  // Image slideshow autoplay logic
+  useEffect(() => {
+    if (!isImage || !isPlaying) return
+
+    const autoplaySeconds = settings?.imageAutoplaySeconds ?? 5
+    if (autoplaySeconds <= 0) return
+
+    const timer = setTimeout(() => {
+      if (onNext) onNext()
+    }, autoplaySeconds * 1000)
+
+    return () => clearTimeout(timer)
+  }, [video, isPlaying, settings, onNext, isImage])
+
   useEffect(() => {
     // Reset loop count when video changes
     setCurrentLoop(0)
@@ -328,30 +344,44 @@ export default function VideoPlayer({
       }}
       onMouseLeave={handleContainerMouseLeave}
     >
-      <video
-        key={`${video.path}-${seekOffset}`}
-        ref={videoRef}
-        src={window.electronAPI.convertPathToMediaUrl(video.path) + (seekOffset > 0 ? `?seek=${seekOffset}` : '')}
-        className="video-element"
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onEnded={handleEnded}
-        onMouseDown={handleVideoMouseDown}
-        onMouseMove={handleVideoMouseMove}
-        onMouseUp={handleVideoMouseUp}
-        onMouseLeave={() => setDragStart(null)}
-        autoPlay
-      >
-        {subtitleUrl && (
-          <track
-            ref={trackRef}
-            key={subtitleUrl}
-            kind="subtitles"
-            src={subtitleUrl}
-            default={subtitleEnabled}
-          />
-        )}
-      </video>
+      {isImage ? (
+        <img
+          key={`${video.path}`}
+          src={window.electronAPI.convertPathToMediaUrl(video.path)}
+          className="video-element"
+          style={{ objectFit: 'contain', width: '100%', height: '100%' }}
+          onMouseDown={handleVideoMouseDown}
+          onMouseMove={handleVideoMouseMove}
+          onMouseUp={handleVideoMouseUp}
+          onMouseLeave={() => setDragStart(null)}
+          alt={video.name}
+        />
+      ) : (
+        <video
+          key={`${video.path}-${seekOffset}`}
+          ref={videoRef}
+          src={window.electronAPI.convertPathToMediaUrl(video.path) + (seekOffset > 0 ? `?seek=${seekOffset}` : '')}
+          className="video-element"
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onEnded={handleEnded}
+          onMouseDown={handleVideoMouseDown}
+          onMouseMove={handleVideoMouseMove}
+          onMouseUp={handleVideoMouseUp}
+          onMouseLeave={() => setDragStart(null)}
+          autoPlay
+        >
+          {subtitleUrl && (
+            <track
+              ref={trackRef}
+              key={subtitleUrl}
+              kind="subtitles"
+              src={subtitleUrl}
+              default={subtitleEnabled}
+            />
+          )}
+        </video>
+      )}
       
       <div 
         className={`top-bar ${!showControls ? 'hidden' : ''}`}
@@ -370,43 +400,51 @@ export default function VideoPlayer({
         onMouseEnter={() => setIsHoveringControls(true)}
         onMouseLeave={() => setIsHoveringControls(false)}
       >
-        <div className="progress-bar-container" onClick={handleSeek}>
-          <div className="progress-fill" style={{ width: `${progress}%` }}>
-            <div className="progress-thumb" />
+        {!isImage && (
+          <div className="progress-bar-container" onClick={handleSeek}>
+            <div className="progress-fill" style={{ width: `${progress}%` }}>
+              <div className="progress-thumb" />
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="controls-row">
           <div className="controls-group">
-            <button className="control-btn" onClick={() => skip(-(settings?.skipSeconds || 10))}><Rewind size={20} /></button>
+            {!isImage && <button className="control-btn" onClick={() => skip(-(settings?.skipSeconds || 10))}><Rewind size={20} /></button>}
             <button className="control-btn" onClick={onPrev}><SkipBack size={24} /></button>
             <button className="control-btn" onClick={togglePlay}>
               {isPlaying ? <Pause size={32} /> : <Play size={32} />}
             </button>
             <button className="control-btn" onClick={onNext}><SkipForward size={24} /></button>
-            <button className="control-btn" onClick={() => skip(settings?.skipSeconds || 10)}><FastForward size={20} /></button>
+            {!isImage && <button className="control-btn" onClick={() => skip(settings?.skipSeconds || 10)}><FastForward size={20} /></button>}
             
-            <span className="time-display text-white">
-              {formatTime(currentTime)} / {formatTime(realDuration || duration)}
-            </span>
+            {!isImage && (
+              <span className="time-display text-white">
+                {formatTime(currentTime)} / {formatTime(realDuration || duration)}
+              </span>
+            )}
           </div>
 
           <div className="controls-group">
-            <button className="control-btn" onClick={() => setIsMuted(!isMuted)}>
-              {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
-            </button>
-            <input 
-              type="range" 
-              min="0" max="1" step="0.05" 
-              value={isMuted ? 0 : volume}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value)
-                setVolume(v)
-                if (videoRef.current) videoRef.current.volume = v
-                setIsMuted(v === 0)
-              }}
-              style={{ width: '80px', cursor: 'pointer' }}
-            />
+            {!isImage && (
+              <>
+                <button className="control-btn" onClick={() => setIsMuted(!isMuted)}>
+                  {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
+                </button>
+                <input 
+                  type="range" 
+                  min="0" max="1" step="0.05" 
+                  value={isMuted ? 0 : volume}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    setVolume(v)
+                    if (videoRef.current) videoRef.current.volume = v
+                    setIsMuted(v === 0)
+                  }}
+                  style={{ width: '80px', cursor: 'pointer' }}
+                />
+              </>
+            )}
 
             <div style={{ position: 'relative' }}>
               <button className="control-btn" onClick={() => setShowSettings(!showSettings)}>
@@ -416,15 +454,17 @@ export default function VideoPlayer({
               {showSettings && (
                 <div className="settings-menu no-drag">
                   <h4>播放設定</h4>
-                  <div className="settings-row">
-                    <span>速度</span>
-                    <select value={playbackRate} onChange={handleRateChange}>
-                      <option value="0.5">0.5x</option>
-                      <option value="1">1.0x</option>
-                      <option value="1.5">1.5x</option>
-                      <option value="2">2.0x</option>
-                    </select>
-                  </div>
+                  {!isImage && (
+                    <div className="settings-row">
+                      <span>速度</span>
+                      <select value={playbackRate} onChange={handleRateChange}>
+                        <option value="0.5">0.5x</option>
+                        <option value="1">1.0x</option>
+                        <option value="1.5">1.5x</option>
+                        <option value="2">2.0x</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="settings-row">
                     <span>循環模式</span>
                     <select value={loopMode} onChange={e => setLoopMode(e.target.value)}>

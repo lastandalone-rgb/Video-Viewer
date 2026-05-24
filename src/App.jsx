@@ -14,7 +14,7 @@ function CollectionCard({ folder, onClick, onRemove, onContextMenu, onDragOver, 
     if (window.electronAPI) {
       window.electronAPI.getFolderCache(folder.path).then(cache => {
         if (cache && cache.length > 0) {
-          setStats({ count: cache.length, firstVideo: cache[0].path })
+          setStats({ count: cache.length, firstMedia: cache[0] })
         }
       })
     }
@@ -36,9 +36,9 @@ function CollectionCard({ folder, onClick, onRemove, onContextMenu, onDragOver, 
         if (onDrop) onDrop(e);
       }}
     >
-      {stats && stats.firstVideo ? (
+      {stats && stats.firstMedia ? (
         <div className="collection-cover">
-          <Thumbnail videoPath={stats.firstVideo} />
+          <Thumbnail mediaPath={stats.firstMedia.path} type={stats.firstMedia.type} />
           <div className="collection-overlay"></div>
         </div>
       ) : (
@@ -123,7 +123,7 @@ export default function App() {
   const [toast, setToast] = useState(null)
   
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' })
-  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10 })
+  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10, imageAutoplaySeconds: 5 })
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   
   const [favorites, setFavorites] = useState([])
@@ -974,6 +974,26 @@ export default function App() {
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>秒</span>
                   </div>
                 </div>
+
+                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  <h3>圖片自動輪播秒數</h3>
+                  <p className="settings-desc">設定在圖片模式下，自動切換至下一張的等待時間 (0 為關閉自動輪播)。</p>
+                  <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <select 
+                      className="view-btn active" 
+                      style={{ padding: '8px 16px', appearance: 'auto' }}
+                      value={settings.imageAutoplaySeconds ?? 5}
+                      onChange={(e) => saveSettings({ imageAutoplaySeconds: parseInt(e.target.value, 10) })}
+                    >
+                      <option value={0} style={{ color: 'black' }}>關閉</option>
+                      <option value={3} style={{ color: 'black' }}>3 秒</option>
+                      <option value={5} style={{ color: 'black' }}>5 秒</option>
+                      <option value={10} style={{ color: 'black' }}>10 秒</option>
+                      <option value={30} style={{ color: 'black' }}>30 秒</option>
+                      <option value={60} style={{ color: 'black' }}>60 秒</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1084,7 +1104,7 @@ export default function App() {
                         onClick={() => setPlayingIndex(index)}
                         onContextMenu={(e) => handleContextMenu(e, 'video', vid.path)}
                       >
-                        <Thumbnail videoPath={vid.path} />
+                        <Thumbnail mediaPath={vid.path} type={vid.type} />
                         <p title={vid.name}>{vid.name}</p>
                       </div>
                     ))}
@@ -1206,7 +1226,7 @@ export default function App() {
                                     draggable="true"
                                     onDragStart={(e) => handleDragStart(e, file.path)}
                                   >
-                                    <Thumbnail videoPath={file.path} />
+                                    <Thumbnail mediaPath={file.path} type={file.type} />
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <PlayCircle size={18} className="icon" />
                                       <h3 title={file.name} style={currentFolder?.mode === 'hierarchy' ? { fontSize: '0.82rem' } : {}}>{file.name}</h3>
@@ -1519,7 +1539,7 @@ export default function App() {
                                 }}
                                 onContextMenu={(e) => handleContextMenu(e, 'video', vid.path)}
                               >
-                                <Thumbnail videoPath={vid.path} />
+                                <Thumbnail mediaPath={vid.path} type={vid.type} />
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <PlayCircle size={18} className="icon" />
                                   <h3 title={vid.name}>{vid.name}</h3>

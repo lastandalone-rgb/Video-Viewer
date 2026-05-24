@@ -408,7 +408,12 @@ ipcMain.handle('process-drop', async (event, droppedPath) => {
       if (VIDEO_EXTENSIONS.has(ext)) {
         return { 
           type: 'video', 
-          video: { name: path.basename(droppedPath), path: droppedPath, size: stat.size, date: stat.mtimeMs }
+          video: { name: path.basename(droppedPath), path: droppedPath, size: stat.size, date: stat.mtimeMs, type: 'video' }
+        }
+      } else if (IMAGE_EXTENSIONS.has(ext)) {
+        return { 
+          type: 'image', 
+          video: { name: path.basename(droppedPath), path: droppedPath, size: stat.size, date: stat.mtimeMs, type: 'image' }
         }
       }
     }
@@ -420,6 +425,7 @@ ipcMain.handle('process-drop', async (event, droppedPath) => {
 
 // Recursive file scanner
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mkv', '.webm', '.avi', '.mov'])
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'])
 
 async function scanDirectory(dirPath) {
   let results = []
@@ -432,14 +438,15 @@ async function scanDirectory(dirPath) {
         results = results.concat(subResults)
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).toLowerCase()
-        if (VIDEO_EXTENSIONS.has(ext)) {
+        if (VIDEO_EXTENSIONS.has(ext) || IMAGE_EXTENSIONS.has(ext)) {
           try {
             const stat = await fs.stat(fullPath)
             results.push({
               name: entry.name,
               path: fullPath,
               size: stat.size,
-              date: stat.mtimeMs
+              date: stat.mtimeMs,
+              type: VIDEO_EXTENSIONS.has(ext) ? 'video' : 'image'
             })
           } catch (e) {
             console.error('Failed to stat file', fullPath, e)
@@ -479,14 +486,15 @@ async function scanHierarchy(dirPath) {
         })
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).toLowerCase()
-        if (VIDEO_EXTENSIONS.has(ext)) {
+        if (VIDEO_EXTENSIONS.has(ext) || IMAGE_EXTENSIONS.has(ext)) {
           try {
             const stat = await fs.stat(fullPath)
             videos.push({
               name: entry.name,
               path: fullPath,
               size: stat.size,
-              date: stat.mtimeMs
+              date: stat.mtimeMs,
+              type: VIDEO_EXTENSIONS.has(ext) ? 'video' : 'image'
             })
           } catch (e) {
             console.error('Failed to stat file', fullPath, e)
