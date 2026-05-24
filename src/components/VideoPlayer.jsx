@@ -74,13 +74,25 @@ export default function VideoPlayer({
     // Auto-load subtitle for the new video
     setSubtitleUrl(null)
     if (video?.path && window.electronAPI?.getSubtitles) {
-      window.electronAPI.getSubtitles(video.path).then((result) => {
-        if (result?.found) {
-          setSubtitleUrl(result.url)
+      window.electronAPI.getSubtitles(video.path).then((subs) => {
+        if (subs && subs.length > 0) {
+          // just auto load the first one found
+          setSubtitleUrl(window.electronAPI.convertPathToMediaUrl(subs[0].path))
+          setSubtitleEnabled(true)
         }
-      }).catch(() => {})
+      })
     }
   }, [video])
+
+  // Sync playing state with video element when switching to video
+  useEffect(() => {
+    if (isImage || !videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.play().catch(e => console.warn('Auto-play prevented', e));
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isPlaying, isImage, video?.path, seekOffset]);
 
   // Ref to hold latest props to avoid stale closures in event listeners
   const latestProps = useRef({ onNext, onPrev, settings, skip: () => {} })

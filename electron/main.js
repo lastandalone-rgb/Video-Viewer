@@ -757,7 +757,8 @@ ipcMain.handle('scan-hierarchy-all', async (event, dirPath) => {
         try {
           const stat = await fs.stat(fullPath)
           const info = { name: entry.name, path: fullPath, size: stat.size, date: stat.mtimeMs, ext, category: getFileCategory(ext) }
-          if (VIDEO_EXTENSIONS.has(ext)) {
+          if (VIDEO_EXTENSIONS.has(ext) || IMAGE_EXTENSIONS.has(ext)) {
+            info.type = VIDEO_EXTENSIONS.has(ext) ? 'video' : 'image'
             videos.push(info)
           } else {
             others.push(info)

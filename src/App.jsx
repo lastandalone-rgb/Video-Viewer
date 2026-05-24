@@ -393,11 +393,11 @@ export default function App() {
     if (!allFiles.videos) return []
     const showAll = fileTypeFilter.has('all')
     let result = []
-    if (showAll || fileTypeFilter.has('video')) result = result.concat(allFiles.videos || [])
+    if (showAll || fileTypeFilter.has('video')) result = result.concat(allFiles.videos.filter(v => !v.type || v.type === 'video'))
+    if (showAll || fileTypeFilter.has('image')) result = result.concat(allFiles.videos.filter(v => v.type === 'image'))
+    
     if ((showAll || fileTypeFilter.has('audio')) && allFiles.others) 
       result = result.concat(allFiles.others.filter(f => f.category === 'audio'))
-    if ((showAll || fileTypeFilter.has('image')) && allFiles.others)
-      result = result.concat(allFiles.others.filter(f => f.category === 'image'))
     if ((showAll || fileTypeFilter.has('archive')) && allFiles.others)
       result = result.concat(allFiles.others.filter(f => f.category === 'archive'))
     if ((showAll || fileTypeFilter.has('doc')) && allFiles.others)
@@ -644,7 +644,10 @@ export default function App() {
   }
 
   const sortedVideos = React.useMemo(() => {
-    let sortable = [...videos]
+    let sortable = videos.filter(v => {
+      if (fileTypeFilter.has('all')) return true
+      return fileTypeFilter.has(v.type || 'video')
+    })
     sortable.sort((a, b) => {
       let aVal = a[sortConfig.key] || (sortConfig.key === 'name' ? '' : 0)
       let bVal = b[sortConfig.key] || (sortConfig.key === 'name' ? '' : 0)
@@ -654,7 +657,7 @@ export default function App() {
       return 0
     })
     return sortable
-  }, [videos, sortConfig])
+  }, [videos, sortConfig, fileTypeFilter])
 
   const requestSort = (key) => {
     let direction = 'asc'
@@ -1031,8 +1034,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {currentFolder?.mode === 'hierarchy' && (
-                    <div className="filter-panel-wrapper no-drag">
+                  <div className="filter-panel-wrapper no-drag">
                       <button 
                         className={`filter-toggle-btn ${fileTypeFilter.has('all') || fileTypeFilter.size > 1 || !fileTypeFilter.has('video') ? 'active' : ''}`}
                         onClick={() => setShowFilterPanel(p => !p)}
@@ -1053,7 +1055,6 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                  )}
 
                   <div className="view-toggles no-drag">
                       <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => { setViewMode('grid'); setPlayingIndex(-1) }} title="網格"><LayoutGrid size={18} /></button>
@@ -1201,11 +1202,11 @@ export default function App() {
                           <div className={viewMode === 'list' ? 'list-view' : 'grid'} style={currentFolder?.mode === 'hierarchy' && viewMode === 'grid' ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' } : {}}>
                             {paginatedItems.map((file, index) => {
                               const isSelected = selectedFiles.has(file.path);
-                              const isVideo = currentFolder?.mode === 'hierarchy' ? (file.category === 'video') : true;
+                              const isMedia = currentFolder?.mode === 'hierarchy' ? (file.category === 'video' || file.category === 'image') : true;
                               const actualIndex = (settings.gridItemsPerPage && settings.gridItemsPerPage !== 'all') 
                                 ? (currentPageIndex * settings.gridItemsPerPage) + index : index;
 
-                              if (isVideo) {
+                              if (isMedia) {
                                 return (
                                   <div
                                     key={file.path}
