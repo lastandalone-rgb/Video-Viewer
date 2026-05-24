@@ -959,19 +959,19 @@ export default function App() {
                 <div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>影片快進 / 倒退秒數</h3>
                   <p className="settings-desc">設定使用鍵盤方向鍵 (左右) 或播放器按鈕時，每次快進與倒退的秒數。</p>
-                  <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
-                    <select 
-                      className="view-btn active" 
-                      style={{ padding: '8px 16px', appearance: 'auto' }}
+                  <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input 
+                      type="number" 
+                      min="1"
+                      max="300"
+                      style={{ width: '80px', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', textAlign: 'center' }}
                       value={settings.skipSeconds || 10}
-                      onChange={(e) => saveSettings({ skipSeconds: parseInt(e.target.value, 10) })}
-                    >
-                      <option value={5} style={{ color: 'black' }}>5 秒</option>
-                      <option value={10} style={{ color: 'black' }}>10 秒</option>
-                      <option value={15} style={{ color: 'black' }}>15 秒</option>
-                      <option value={30} style={{ color: 'black' }}>30 秒</option>
-                      <option value={60} style={{ color: 'black' }}>60 秒</option>
-                    </select>
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10)
+                        if (!isNaN(val) && val > 0) saveSettings({ skipSeconds: val })
+                      }}
+                    />
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>秒</span>
                   </div>
                 </div>
               </div>
