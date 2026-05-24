@@ -741,6 +741,7 @@ export default function App() {
           }}
           isPopout={true}
           initialAlwaysOnTop={alwaysOnTop}
+          settings={settings}
         />
       </div>
     )

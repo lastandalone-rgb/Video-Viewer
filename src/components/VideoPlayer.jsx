@@ -64,7 +64,11 @@ export default function VideoPlayer({
         }
       }).catch(() => {})
     }
-  }, [video])
+  // Ref to hold latest props to avoid stale closures in event listeners
+  const latestProps = useRef({ onNext, onPrev, settings })
+  useEffect(() => {
+    latestProps.current = { onNext, onPrev, settings }
+  })
 
   useEffect(() => {
     isHoveringControlsRef.current = isHoveringControls
@@ -92,18 +96,19 @@ export default function VideoPlayer({
       wakeUpControls()
 
       // Handle custom shortcuts for prev/next
-      const prevKey = settings?.shortcuts?.prev || 'a'
-      const nextKey = settings?.shortcuts?.next || 'c'
+      const currentProps = latestProps.current
+      const prevKey = currentProps.settings?.shortcuts?.prev || 'a'
+      const nextKey = currentProps.settings?.shortcuts?.next || 'c'
 
-      if (e.key === prevKey && typeof onPrev === 'function') {
+      if (e.key === prevKey && typeof currentProps.onPrev === 'function') {
         e.preventDefault()
-        onPrev()
+        currentProps.onPrev()
         return
       }
       
-      if (e.key === nextKey && typeof onNext === 'function') {
+      if (e.key === nextKey && typeof currentProps.onNext === 'function') {
         e.preventDefault()
-        onNext()
+        currentProps.onNext()
         return
       }
 
