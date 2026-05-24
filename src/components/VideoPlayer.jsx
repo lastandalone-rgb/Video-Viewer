@@ -310,12 +310,19 @@ export default function VideoPlayer({
       className={isEmbedded ? "player-embedded" : "player-overlay"} 
       onContextMenu={handleContextMenu}
       onDoubleClick={toggleFullscreen}
-      onMouseMove={() => {
-        setShowControls(true)
-        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current)
-        controlsTimeoutRef.current = setTimeout(() => {
-          if (isPlaying && !showSettings && !isHoveringControlsRef.current) setShowControls(false)
-        }, 3000)
+      onMouseMove={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        const y = e.clientY - rect.top
+        const height = rect.height
+        
+        // Show controls if near top (e.g., top 100px) or near bottom (e.g., bottom 150px)
+        if (y < 100 || y > height - 150) {
+          setShowControls(true)
+          if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current)
+          controlsTimeoutRef.current = setTimeout(() => {
+            if (isPlaying && !showSettings && !isHoveringControlsRef.current) setShowControls(false)
+          }, 3000)
+        }
       }}
       onMouseLeave={handleContainerMouseLeave}
     >
