@@ -64,6 +64,8 @@ export default function VideoPlayer({
         }
       }).catch(() => {})
     }
+  }, [video])
+
   // Ref to hold latest props to avoid stale closures in event listeners
   const latestProps = useRef({ onNext, onPrev, settings })
   useEffect(() => {
