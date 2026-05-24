@@ -760,6 +760,13 @@ button, input, webview, a, .no-drag, .video-container, .video-element, .progress
   z-index: 50;
 }
 
+.pagination-controls .btn.active {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  font-weight: bold;
+}
+
 /* Collection Library (Netflix Style) */
 .collection-grid {
   display: grid;

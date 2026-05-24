@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Folder, FolderPlus, Trash2, PlayCircle, ArrowLeft, LayoutGrid, List, AlignJustify, MonitorPlay, ChevronDown, ChevronUp, Home, Settings, HardDrive, Menu, Heart, Globe, FolderTree, ArrowUp, ArrowRight, RotateCcw, Bookmark, ExternalLink, Filter, X, Archive, Film, Music, Image, FileText, File } from 'lucide-react'
 import VideoPlayer from './components/VideoPlayer'
 import Thumbnail from './components/Thumbnail'
+import Pagination from './components/Pagination'
 
 const folderCache = new Map()
 
@@ -122,9 +123,8 @@ export default function App() {
   const [toast, setToast] = useState(null)
   
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' })
-  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com' })
+  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' } })
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
-  const [jumpPageInput, setJumpPageInput] = useState('')
   
   const [favorites, setFavorites] = useState([])
   
@@ -671,22 +671,6 @@ export default function App() {
     ? Math.ceil(currentDataSource.length / settings.gridItemsPerPage)
     : 1
 
-  const getPageNumbers = () => {
-    const pages = []
-    if (totalPages <= 7) {
-      for (let i = 0; i < totalPages; i++) pages.push(i)
-    } else {
-      if (currentPageIndex <= 3) {
-        pages.push(0, 1, 2, 3, 4, '...', totalPages - 1)
-      } else if (currentPageIndex >= totalPages - 4) {
-        pages.push(0, '...', totalPages - 5, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1)
-      } else {
-        pages.push(0, '...', currentPageIndex - 1, currentPageIndex, currentPageIndex + 1, '...', totalPages - 1)
-      }
-    }
-    return pages
-  }
-
   const formatSize = (bytes) => {
     if (!bytes) return '--'
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
@@ -830,6 +814,7 @@ export default function App() {
             onClose={() => setPlayingIndex(-1)}
             onNext={handleNext}
             onPrev={handlePrev}
+            settings={settings}
           />
         )}
 
@@ -924,6 +909,39 @@ export default function App() {
                     />
                   </div>
                 </div>
+
+                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  <h3>快捷鍵設定 (播放器)</h3>
+                  <p className="settings-desc">設定在播放影片時，用來切換上一部與下一部影片的快捷鍵 (點擊輸入框後按下欲設定的按鍵)。</p>
+                  <div style={{ marginTop: '16px', display: 'flex', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>上一部影片</label>
+                      <input 
+                        type="text" 
+                        style={{ width: '120px', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', textAlign: 'center', cursor: 'pointer' }}
+                        value={settings.shortcuts?.prev || 'a'}
+                        readOnly
+                        onKeyDown={(e) => {
+                          e.preventDefault()
+                          saveSettings({ shortcuts: { ...settings.shortcuts, prev: e.key } })
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>下一部影片</label>
+                      <input 
+                        type="text" 
+                        style={{ width: '120px', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', textAlign: 'center', cursor: 'pointer' }}
+                        value={settings.shortcuts?.next || 'c'}
+                        readOnly
+                        onKeyDown={(e) => {
+                          e.preventDefault()
+                          saveSettings({ shortcuts: { ...settings.shortcuts, next: e.key } })
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1015,6 +1033,7 @@ export default function App() {
                         onClose={() => { setViewMode('grid'); setPlayingIndex(-1) }}
                         onNext={handleNext}
                         onPrev={handlePrev}
+                        settings={settings}
                         isEmbedded={true}
                       />
                     ) : (
@@ -1189,44 +1208,11 @@ export default function App() {
                   )}
                   
                   {totalPages > 1 && (
-                    <div className="pagination-controls no-drag">
-                      <button className="btn" style={{ padding: '8px 12px' }} disabled={currentPageIndex === 0} onClick={() => setCurrentPageIndex(p => p - 1)}>&lt;</button>
-                      {getPageNumbers().map((page, idx) => (
-                        page === '...' ? (
-                          <span key={`ellipsis-${idx}`} style={{ color: 'var(--text-secondary)', padding: '0 4px' }}>...</span>
-                        ) : (
-                          <button
-                            key={page}
-                            className={`btn ${currentPageIndex === page ? 'active' : ''}`}
-                            style={{ padding: '8px 14px' }}
-                            onClick={() => setCurrentPageIndex(page)}
-                          >
-                            {page + 1}
-                          </button>
-                        )
-                      ))}
-                      <button className="btn" style={{ padding: '8px 12px' }} disabled={currentPageIndex === totalPages - 1} onClick={() => setCurrentPageIndex(p => p + 1)}>&gt;</button>
-                      <div style={{ display: 'flex', alignItems: 'center', marginLeft: '16px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginRight: '8px' }}>跳轉:</span>
-                        <input 
-                          type="number" 
-                          min="1" max={totalPages}
-                          style={{ width: '60px', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
-                          value={jumpPageInput}
-                          placeholder={currentPageIndex + 1}
-                          onChange={e => setJumpPageInput(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              const page = parseInt(jumpPageInput)
-                              if (!isNaN(page) && page >= 1 && page <= totalPages) {
-                                setCurrentPageIndex(page - 1)
-                                setJumpPageInput('')
-                              }
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
+                    <Pagination 
+                      totalPages={totalPages} 
+                      currentPageIndex={currentPageIndex} 
+                      setCurrentPageIndex={setCurrentPageIndex} 
+                    />
                   )}
                 </main>
               )}

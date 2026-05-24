@@ -9,7 +9,8 @@ export default function VideoPlayer({
   onPrev,
   isEmbedded = false,
   isPopout = false,
-  initialAlwaysOnTop = false
+  initialAlwaysOnTop = false,
+  settings = {}
 }) {
   const videoRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(true)
@@ -22,6 +23,8 @@ export default function VideoPlayer({
   const [isMuted, setIsMuted] = useState(false)
   const [showControls, setShowControls] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
+  const [isHoveringControls, setIsHoveringControls] = useState(false)
+  const isHoveringControlsRef = useRef(false)
   
   // Settings state
   const [playbackRate, setPlaybackRate] = useState(1)
@@ -64,11 +67,15 @@ export default function VideoPlayer({
   }, [video])
 
   useEffect(() => {
+    isHoveringControlsRef.current = isHoveringControls
+  }, [isHoveringControls])
+
+  useEffect(() => {
     const wakeUpControls = () => {
       setShowControls(true)
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current)
       controlsTimeoutRef.current = setTimeout(() => {
-        if (isPlaying && !showSettings) {
+        if (isPlaying && !showSettings && !isHoveringControlsRef.current) {
           setShowControls(false)
         }
       }, 3000)
@@ -80,9 +87,25 @@ export default function VideoPlayer({
 
     const handleKeyDown = (e) => {
       // Don't intercept if user is typing in an input
-      if (e.target.tagName === 'INPUT') return
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
 
       wakeUpControls()
+
+      // Handle custom shortcuts for prev/next
+      const prevKey = settings?.shortcuts?.prev || 'a'
+      const nextKey = settings?.shortcuts?.next || 'c'
+
+      if (e.key === prevKey && typeof onPrev === 'function') {
+        e.preventDefault()
+        onPrev()
+        return
+      }
+      
+      if (e.key === nextKey && typeof onNext === 'function') {
+        e.preventDefault()
+        onNext()
+        return
+      }
 
       switch (e.key) {
         case ' ':
@@ -113,7 +136,6 @@ export default function VideoPlayer({
       }
     }
 
-    window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('keydown', handleKeyDown)
     // Start timeout immediately if it's currently playing
     if (isPlaying) {
@@ -121,7 +143,6 @@ export default function VideoPlayer({
     }
     
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('keydown', handleKeyDown)
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current)
     }
@@ -273,11 +294,25 @@ export default function VideoPlayer({
     if (videoRef.current) videoRef.current.playbackRate = rate
   }
 
+  const handleContainerMouseLeave = () => {
+    if (isPlaying && !showSettings) {
+      setShowControls(false)
+    }
+  }
+
   return (
     <div 
       className={isEmbedded ? "player-embedded" : "player-overlay"} 
       onContextMenu={handleContextMenu}
       onDoubleClick={toggleFullscreen}
+      onMouseMove={() => {
+        setShowControls(true)
+        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current)
+        controlsTimeoutRef.current = setTimeout(() => {
+          if (isPlaying && !showSettings && !isHoveringControlsRef.current) setShowControls(false)
+        }, 3000)
+      }}
+      onMouseLeave={handleContainerMouseLeave}
     >
       <video
         key={`${video.path}-${seekOffset}`}
@@ -304,7 +339,11 @@ export default function VideoPlayer({
         )}
       </video>
       
-      <div className={`top-bar ${!showControls ? 'hidden' : ''}`}>
+      <div 
+        className={`top-bar ${!showControls ? 'hidden' : ''}`}
+        onMouseEnter={() => setIsHoveringControls(true)}
+        onMouseLeave={() => setIsHoveringControls(false)}
+      >
         <button className="control-btn" onClick={onClose}>
           <ArrowLeft size={28} />
         </button>
@@ -312,7 +351,11 @@ export default function VideoPlayer({
         <div style={{ width: 28 }}></div>
       </div>
 
-      <div className={`controls-container ${!showControls ? 'hidden' : ''}`}>
+      <div 
+        className={`controls-container ${!showControls ? 'hidden' : ''}`}
+        onMouseEnter={() => setIsHoveringControls(true)}
+        onMouseLeave={() => setIsHoveringControls(false)}
+      >
         <div className="progress-bar-container" onClick={handleSeek}>
           <div className="progress-fill" style={{ width: `${progress}%` }}>
             <div className="progress-thumb" />
