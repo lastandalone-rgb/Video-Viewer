@@ -67,9 +67,9 @@ export default function VideoPlayer({
   }, [video])
 
   // Ref to hold latest props to avoid stale closures in event listeners
-  const latestProps = useRef({ onNext, onPrev, settings })
+  const latestProps = useRef({ onNext, onPrev, settings, skip: () => {} })
   useEffect(() => {
-    latestProps.current = { onNext, onPrev, settings }
+    latestProps.current = { onNext, onPrev, settings, skip }
   })
 
   useEffect(() => {
@@ -121,11 +121,11 @@ export default function VideoPlayer({
           break
         case 'ArrowRight':
           e.preventDefault()
-          skip(skipSeconds)
+          currentProps.skip(skipSeconds)
           break
         case 'ArrowLeft':
           e.preventDefault()
-          skip(-skipSeconds)
+          currentProps.skip(-skipSeconds)
           break
         case 'ArrowUp':
           e.preventDefault()
