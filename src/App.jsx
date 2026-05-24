@@ -1036,7 +1036,7 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                <main className="scrollable">
+                <main className="scrollable" style={{ display: 'flex', flexDirection: 'column' }}>
                   {isLoading ? (
                     <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>掃描影片中...</div>
                   ) : (
