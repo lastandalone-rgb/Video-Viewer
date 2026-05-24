@@ -659,6 +659,8 @@ export default function App() {
     return sortable
   }, [videos, sortConfig, fileTypeFilter])
 
+  const theatreVideos = React.useMemo(() => sortedVideos.filter(v => v.type === 'video'), [sortedVideos])
+
   const requestSort = (key) => {
     let direction = 'asc'
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'
@@ -702,9 +704,10 @@ export default function App() {
   }
 
   const handleNext = (shouldLoopPlaylist = false) => {
-    if (sortedVideos.length === 0) return
+    const list = viewMode === 'theatre' ? theatreVideos : sortedVideos
+    if (list.length === 0) return
     let nextIndex = playingIndex + 1
-    if (nextIndex >= sortedVideos.length) {
+    if (nextIndex >= list.length) {
       if (shouldLoopPlaylist) nextIndex = 0
       else { setPlayingIndex(-1); return }
     }
@@ -712,10 +715,32 @@ export default function App() {
   }
 
   const handlePrev = () => {
-    if (sortedVideos.length === 0) return
+    const list = viewMode === 'theatre' ? theatreVideos : sortedVideos
+    if (list.length === 0) return
     let prevIndex = playingIndex - 1
-    if (prevIndex < 0) prevIndex = sortedVideos.length - 1
+    if (prevIndex < 0) prevIndex = list.length - 1
     setPlayingIndex(prevIndex)
+  }
+
+  const handleViewModeChange = (newMode) => {
+    if (newMode === viewMode) return;
+    
+    if (newMode === 'theatre') {
+      if (playingIndex !== -1 && sortedVideos[playingIndex]) {
+        const file = sortedVideos[playingIndex];
+        if (file.type === 'video') {
+          const idx = theatreVideos.findIndex(v => v.path === file.path);
+          setPlayingIndex(idx !== -1 ? idx : 0);
+        } else {
+          setPlayingIndex(-1);
+        }
+      } else {
+        setPlayingIndex(-1);
+      }
+    } else {
+      setPlayingIndex(-1);
+    }
+    setViewMode(newMode);
   }
 
   const handlePlayVideo = (index) => {
@@ -1058,10 +1083,10 @@ export default function App() {
                     </div>
 
                   <div className="view-toggles no-drag">
-                      <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => { setViewMode('grid'); setPlayingIndex(-1) }} title="網格"><LayoutGrid size={18} /></button>
-                      <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => { setViewMode('list'); setPlayingIndex(-1) }} title="條列"><List size={18} /></button>
-                      <button className={`view-btn ${viewMode === 'compact' ? 'active' : ''}`} onClick={() => { setViewMode('compact'); setPlayingIndex(-1) }} title="清單"><AlignJustify size={18} /></button>
-                      <button className={`view-btn ${viewMode === 'theatre' ? 'active' : ''}`} onClick={() => setViewMode('theatre')} title="劇場"><MonitorPlay size={18} /></button>
+                      <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => handleViewModeChange('grid')} title="網格"><LayoutGrid size={18} /></button>
+                      <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => handleViewModeChange('list')} title="條列"><List size={18} /></button>
+                      <button className={`view-btn ${viewMode === 'compact' ? 'active' : ''}`} onClick={() => handleViewModeChange('compact')} title="清單"><AlignJustify size={18} /></button>
+                      <button className={`view-btn ${viewMode === 'theatre' ? 'active' : ''}`} onClick={() => handleViewModeChange('theatre')} title="劇場"><MonitorPlay size={18} /></button>
                     </div>
 
                   {selectedFiles.size > 0 && (
@@ -1080,11 +1105,11 @@ export default function App() {
               {viewMode === 'theatre' ? (
                 <div className="theatre-layout">
                   <div className="theatre-player-wrapper">
-                    {playingIndex !== -1 && sortedVideos[playingIndex] ? (
+                    {playingIndex !== -1 && theatreVideos[playingIndex] ? (
                       <VideoPlayer 
-                        video={sortedVideos[playingIndex]} 
-                        playlist={sortedVideos}
-                        onClose={() => { setViewMode('grid'); setPlayingIndex(-1) }}
+                        video={theatreVideos[playingIndex]} 
+                        playlist={theatreVideos}
+                        onClose={() => handleViewModeChange('grid')}
                         onNext={handleNext}
                         onPrev={handlePrev}
                         settings={settings}
@@ -1099,7 +1124,7 @@ export default function App() {
                     className="theatre-playlist-ribbon scrollable-x no-drag" 
                     onWheel={handleRibbonWheel}
                   >
-                    {sortedVideos.map((vid, index) => (
+                    {theatreVideos.map((vid, index) => (
                       <div 
                         key={vid.path} 
                         className={`ribbon-card ${playingIndex === index ? 'active' : ''}`} 
@@ -1113,7 +1138,8 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                <main className="scrollable">
+                <>
+                  <main className="scrollable">
                   {isLoading ? (
                     <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>掃描影片中...</div>
                   ) : (
@@ -1264,17 +1290,19 @@ export default function App() {
                       </div>
                     )
                   )}
-                  
-                  {totalPages > 1 && (
+                </main>
+                {totalPages > 1 && (
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', padding: '12px 0', background: 'var(--bg-primary)', zIndex: 10 }}>
                     <Pagination 
                       totalPages={totalPages} 
                       currentPageIndex={currentPageIndex} 
                       setCurrentPageIndex={setCurrentPageIndex} 
                     />
-                  )}
-                </main>
-              )}
-          </div>
+                  </div>
+                )}
+              </>
+            )}
+        </div>
 
           {/* ── Batch Rename Extension Dialog ── */}
           {showRenameDialog && (

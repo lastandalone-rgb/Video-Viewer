@@ -84,6 +84,25 @@ export default function VideoPlayer({
     }
   }, [video])
 
+  // Cleanup video src on unmount to prevent leaked stream connections
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el && video) {
+      // React 18 Strict Mode workaround: re-apply src if it was wiped by the simulated unmount
+      if (!el.getAttribute('src')) {
+        const mediaUrl = window.electronAPI.convertPathToMediaUrl(video.path)
+        el.src = mediaUrl + (seekOffset > 0 ? `?seek=${seekOffset}` : '')
+      }
+    }
+    return () => {
+      if (el) {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+      }
+    }
+  }, [video?.path, seekOffset]);
+
   // Sync playing state with video element when switching to video
   useEffect(() => {
     if (isImage || !videoRef.current) return;
@@ -92,7 +111,7 @@ export default function VideoPlayer({
     } else {
       videoRef.current.pause();
     }
-  }, [isPlaying, isImage, video?.path, seekOffset]);
+  }, [isPlaying, isImage]);
 
   // Ref to hold latest props to avoid stale closures in event listeners
   const latestProps = useRef({ onNext, onPrev, settings, skip: () => {} })
