@@ -39,10 +39,18 @@ export default function VideoPlayer({
   const [subtitleUrl, setSubtitleUrl] = useState(null)
   const [subtitleEnabled, setSubtitleEnabled] = useState(true)
   const trackRef = useRef(null)
+  const containerRef = useRef(null)
   
   const controlsTimeoutRef = useRef(null)
 
   const isImage = video?.type === 'image'
+
+  
+  useEffect(() => {
+    if (document.body.classList.contains('spatial-nav-active') && containerRef.current) {
+      setTimeout(() => containerRef.current.focus(), 100);
+    }
+  }, []);
 
   // Image slideshow autoplay logic
   useEffect(() => {
@@ -114,9 +122,9 @@ export default function VideoPlayer({
   }, [isPlaying, isImage]);
 
   // Ref to hold latest props to avoid stale closures in event listeners
-  const latestProps = useRef({ onNext, onPrev, settings, skip: () => {} })
+  const latestProps = useRef({ onClose, onNext, onPrev, settings, skip: () => {} })
   useEffect(() => {
-    latestProps.current = { onNext, onPrev, settings, skip }
+    latestProps.current = { onClose, onNext, onPrev, settings, skip }
   })
 
   useEffect(() => {
@@ -186,6 +194,14 @@ export default function VideoPlayer({
         case 'F':
           e.preventDefault()
           toggleFullscreen()
+          break
+        case 'x':
+        case 'X':
+          console.log('X pressed in VideoPlayer!');
+          e.preventDefault()
+          if (typeof currentProps.onClose === 'function') {
+            currentProps.onClose()
+          }
           break
       }
     }
@@ -360,6 +376,8 @@ export default function VideoPlayer({
 
   return (
     <div 
+      ref={containerRef}
+      tabIndex={-1}
       className={isEmbedded ? "player-embedded" : "player-overlay"} 
       onContextMenu={handleContextMenu}
       onDoubleClick={toggleFullscreen}

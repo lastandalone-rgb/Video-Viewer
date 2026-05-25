@@ -1,3 +1,4 @@
+import { useSpatialNavigation } from "./hooks/useSpatialNavigation";
 import React, { useState, useEffect, useRef } from 'react'
 import { Folder, FolderPlus, Trash2, PlayCircle, ArrowLeft, LayoutGrid, List, AlignJustify, MonitorPlay, ChevronDown, ChevronUp, Home, Settings, HardDrive, Menu, Heart, Globe, FolderTree, ArrowUp, ArrowRight, RotateCcw, Bookmark, ExternalLink, Filter, X, Archive, Film, Music, Image, FileText, File } from 'lucide-react'
 import VideoPlayer from './components/VideoPlayer'
@@ -23,7 +24,8 @@ function CollectionCard({ folder, onClick, onRemove, onContextMenu, onDragOver, 
   return (
     <div 
       className={`collection-card ${isDragOver ? 'drag-over' : ''}`} 
-      onClick={onClick} 
+      tabIndex={0}
+onClick={onClick} 
       onContextMenu={onContextMenu}
       onDragOver={(e) => {
         e.preventDefault();
@@ -35,6 +37,8 @@ function CollectionCard({ folder, onClick, onRemove, onContextMenu, onDragOver, 
         setIsDragOver(false);
         if (onDrop) onDrop(e);
       }}
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') onClick(e) }}
     >
       {stats && stats.firstMedia ? (
         <div className="collection-cover">
@@ -61,8 +65,10 @@ function ExtractDialog({ archivePaths, defaultMode, onConfirm, onCancel }) {
   const [showPwd, setShowPwd] = useState(false)
   const names = archivePaths.map(p => p.split(/[/\\]/).pop())
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div className="rename-dialog" style={{ width: 420 }} onClick={e => e.stopPropagation()}>
+    <div className="modal-backdrop" tabIndex={0}
+onClick={onCancel}>
+      <div className="rename-dialog" style={{ width: 420 }} tabIndex={0}
+onClick={e => e.stopPropagation()}>
         <h3>📦 解壓縮設定</h3>
         <p style={{ marginBottom: 12 }}>
           {names.length === 1 ? names[0] : `${names.length} 個壓縮檔`}
@@ -110,6 +116,8 @@ function ExtractDialog({ archivePaths, defaultMode, onConfirm, onCancel }) {
 }
 
 export default function App() {
+  useSpatialNavigation();
+
   const [currentPage, setCurrentPage] = useState('home') // 'home' | 'settings'
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [collections, setCollections] = useState([])
@@ -122,6 +130,27 @@ export default function App() {
   const [viewMode, setViewMode] = useState('grid')
   const [toast, setToast] = useState(null)
   
+  useEffect(() => {
+    if (document.body.classList.contains('spatial-nav-active')) {
+      if (playingIndex !== -1) return; // Let VideoPlayer handle its own focus
+      setTimeout(() => {
+        const contentArea = document.querySelector('.main-content');
+        if (contentArea) {
+          const focusables = Array.from(contentArea.querySelectorAll('.collection-card, .card, .file-card, .grid-item, .list-item, tr[tabindex], .breadcrumb-segment')).filter(el => {
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).visibility !== 'hidden';
+          });
+          if (playingIndex === -1 && lastFocusedCardRef.current && document.body.contains(lastFocusedCardRef.current)) {
+            lastFocusedCardRef.current.focus({ preventScroll: true });
+            lastFocusedCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+          } else if (focusables.length > 0) {
+            focusables[0].focus({ preventScroll: true });
+          }
+        }
+      }, 50);
+    }
+  }, [currentFolder, currentSubFolderPath, currentPage, viewMode, playingIndex, isLoading]);
+  
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' })
   const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10, imageAutoplaySeconds: 5 })
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
@@ -133,6 +162,7 @@ export default function App() {
   const [popoutData, setPopoutData] = useState(null)
   
   const theatreRibbonRef = useRef(null)
+  const lastFocusedCardRef = useRef(null)
 
   // Hierarchy all-files mode state
   const [allFiles, setAllFiles] = useState([])          // { videos, folders, others }
@@ -744,6 +774,9 @@ export default function App() {
   }
 
   const handlePlayVideo = (index) => {
+    if (document.body.classList.contains('spatial-nav-active')) {
+      lastFocusedCardRef.current = document.activeElement;
+    }
     if (settings.playbackBehavior === 'popout' && viewMode !== 'theatre') {
       if (window.electronAPI) {
         window.electronAPI.openPopoutPlayer({
@@ -1128,8 +1161,10 @@ export default function App() {
                       <div 
                         key={vid.path} 
                         className={`ribbon-card ${playingIndex === index ? 'active' : ''}`} 
-                        onClick={() => setPlayingIndex(index)}
+                        tabIndex={0}
+onClick={() => setPlayingIndex(index)}
                         onContextMenu={(e) => handleContextMenu(e, 'video', vid.path)}
+                        tabIndex={0}
                       >
                         <Thumbnail mediaPath={vid.path} type={vid.type} />
                         <p title={vid.name}>{vid.name}</p>
@@ -1162,9 +1197,12 @@ export default function App() {
                         <table className="data-table">
                           <thead>
                             <tr>
-                              <th onClick={() => requestSort('name')}>檔案名稱 <SortIcon columnKey="name" /></th>
-                              <th onClick={() => requestSort('date')}>建立日期 <SortIcon columnKey="date" /></th>
-                              <th onClick={() => requestSort('size')}>大小 <SortIcon columnKey="size" /></th>
+                              <th tabIndex={0}
+onClick={() => requestSort('name')}>檔案名稱 <SortIcon columnKey="name" /></th>
+                              <th tabIndex={0}
+onClick={() => requestSort('date')}>建立日期 <SortIcon columnKey="date" /></th>
+                              <th tabIndex={0}
+onClick={() => requestSort('size')}>大小 <SortIcon columnKey="size" /></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1176,6 +1214,7 @@ export default function App() {
                               return (
                                 <tr 
                                   key={file.path}
+                                  tabIndex={0}
                                   onClick={(e) => {
                                     if (currentFolder?.mode === 'hierarchy') {
                                       if (e.ctrlKey || e.metaKey) { toggleSelectFile(e, file.path); return }
@@ -1240,6 +1279,7 @@ export default function App() {
                                     ref={el => { if (currentFolder?.mode === 'hierarchy') fileCardRefs.current[file.path] = el }}
                                     className={`card ${isSelected ? 'selected' : ''}`}
                                     style={{ cursor: 'pointer', outline: isSelected ? '2px solid var(--accent-color)' : 'none', outlineOffset: '2px' }}
+                                    tabIndex={0}
                                     onClick={(e) => {
                                       if (currentFolder?.mode === 'hierarchy') {
                                         if (isDraggingRef.current) return;
@@ -1269,6 +1309,7 @@ export default function App() {
                                     key={file.path}
                                     ref={el => { if (currentFolder?.mode === 'hierarchy') fileCardRefs.current[file.path] = el }}
                                     className={`file-card ${isSelected ? 'selected' : ''}`}
+                                    tabIndex={0}
                                     onClick={(e) => { if (isDraggingRef.current) return; toggleSelectFile(e, file.path) }}
                                     onContextMenu={(e) => openHierarchyCtxMenu(e, file)}
                                   >
@@ -1306,8 +1347,10 @@ export default function App() {
 
           {/* ── Batch Rename Extension Dialog ── */}
           {showRenameDialog && (
-            <div className="modal-backdrop" onClick={() => setShowRenameDialog(false)}>
-              <div className="rename-dialog" onClick={e => e.stopPropagation()}>
+            <div className="modal-backdrop" tabIndex={0}
+onClick={() => setShowRenameDialog(false)}>
+              <div className="rename-dialog" tabIndex={0}
+onClick={e => e.stopPropagation()}>
                 <h3>批量重命名副檔名</h3>
                 <p>已選取 {selectedFiles.size} 個檔案，請輸入新的副檔名（例如 <code>.mkv</code>）</p>
                 <input
@@ -1405,11 +1448,13 @@ export default function App() {
           )}
           {hierarchyCtxMenu && (
             <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 399 }} onClick={closeHierarchyCtxMenu} onContextMenu={e => { e.preventDefault(); closeHierarchyCtxMenu() }} />
+              <div style={{ position: 'fixed', inset: 0, zIndex: 399 }} tabIndex={0}
+onClick={closeHierarchyCtxMenu} onContextMenu={e => { e.preventDefault(); closeHierarchyCtxMenu() }} />
               <div
                 className="hierarchy-ctx-menu"
                 style={{ left: hierarchyCtxMenu.x, top: hierarchyCtxMenu.y }}
-                onClick={closeHierarchyCtxMenu}
+                tabIndex={0}
+onClick={closeHierarchyCtxMenu}
               >
                 {hierarchyCtxMenu.file.category === 'video' && (
                   <>
@@ -1497,7 +1542,8 @@ export default function App() {
                         <div className="collection-grid">
                           {favorites.filter(f => f.type === 'bookmark').map(fav => (
                             <div key={fav.path} className="collection-card" style={{ height: 'auto', padding: '16px' }}
-                                 onClick={() => {
+                                 tabIndex={0}
+onClick={() => {
                                     setBrowserInputUrl(fav.path)
                                     setCurrentBrowserUrl(fav.path)
                                     if(webviewRef.current) webviewRef.current.loadURL(fav.path)
@@ -1550,7 +1596,8 @@ export default function App() {
                               <div 
                                 key={vid.path} 
                                 className="card" 
-                                onClick={() => {
+                                tabIndex={0}
+onClick={() => {
                                   if (settings.playbackBehavior === 'popout') {
                                     if (window.electronAPI) {
                                       window.electronAPI.openPopoutPlayer({
