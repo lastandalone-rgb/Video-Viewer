@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function Pagination({
   maxVisiblePages = 7, 
@@ -7,6 +7,30 @@ export default function Pagination({
   setCurrentPageIndex
 }) {
   const [jumpPageInput, setJumpPageInput] = useState('');
+  const [lastClickedPage, setLastClickedPage] = useState(null);
+
+  useEffect(() => {
+    if (lastClickedPage !== null && lastClickedPage === currentPageIndex) {
+      const nextPageIndex = currentPageIndex + 1;
+      if (nextPageIndex < totalPages) {
+        // Try to focus the button for the next page
+        const btns = document.querySelectorAll('.pagination-controls button.btn');
+        const targetText = String(nextPageIndex + 1);
+        for (const btn of btns) {
+          if (btn.innerText === targetText) {
+            btn.focus({ preventScroll: true });
+            break;
+          }
+        }
+      }
+      setLastClickedPage(null);
+    }
+  }, [currentPageIndex, totalPages, lastClickedPage]);
+
+  const handlePageClick = (page) => {
+    setLastClickedPage(page);
+    setCurrentPageIndex(page);
+  };
 
   if (totalPages <= 1) return null;
 
@@ -53,7 +77,7 @@ export default function Pagination({
             key={page}
             className={`btn ${currentPageIndex === page ? 'active' : ''}`}
             style={{ padding: '8px 14px' }}
-            onClick={() => setCurrentPageIndex(page)}
+            onClick={() => handlePageClick(page)}
           >
             {page + 1}
           </button>
