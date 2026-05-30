@@ -28,8 +28,26 @@ export default function VideoPlayer({
   
   // Settings state
   const [playbackRate, setPlaybackRate] = useState(1)
-  const [loopMode, setLoopMode] = useState('none') // 'none', 'single', 'playlist'
-  const [loopCount, setLoopCount] = useState(1) // times to loop
+  const [loopMode, setLoopMode] = useState(settings?.loopMode || 'none') // 'none', 'single', 'playlist'
+  const [loopCount, setLoopCount] = useState(settings?.loopCount !== undefined ? settings.loopCount : 1) // times to loop
+
+  const handleLoopModeChange = (mode) => {
+    setLoopMode(mode)
+    if (onSettingsChange) {
+      onSettingsChange({ loopMode: mode })
+    } else if (window.electronAPI) {
+      window.electronAPI.saveSettings({ ...settings, loopMode: mode })
+    }
+  }
+
+  const handleLoopCountChange = (count) => {
+    setLoopCount(count)
+    if (onSettingsChange) {
+      onSettingsChange({ loopCount: count })
+    } else if (window.electronAPI) {
+      window.electronAPI.saveSettings({ ...settings, loopCount: count })
+    }
+  }
   const [currentLoop, setCurrentLoop] = useState(0)
   
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(initialAlwaysOnTop)
@@ -520,7 +538,7 @@ export default function VideoPlayer({
                   )}
                   <div className="settings-row">
                     <span>循環模式</span>
-                    <select value={loopMode} onChange={e => setLoopMode(e.target.value)}>
+                    <select value={loopMode} onChange={e => handleLoopModeChange(e.target.value)}>
                       <option value="none">不循環</option>
                       <option value="single">單一影片</option>
                       <option value="playlist">資料夾輪播</option>

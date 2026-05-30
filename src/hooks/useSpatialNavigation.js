@@ -37,12 +37,12 @@ export function useSpatialNavigation() {
     const key = e.key.toLowerCase();
     
     if (key === 'x') {
-      // If we are inside the video player, let the VideoPlayer's own event handler handle 'x' (which closes it)
-      if (activeEl) {
-        const isInsidePlayer = activeEl.closest('.player-embedded, .player-overlay, .theatre-player-wrapper');
-        if (isInsidePlayer) {
-          return; // Do not intercept, let VideoPlayer handle it
-        }
+      // If there is any active video player globally, X should ALWAYS close the player.
+      // We don't want a stray activeElement (e.g. user accidentally clicked outside the player) 
+      // to intercept X and trigger a different action.
+      const isPlayerOpen = document.querySelector('.player-embedded, .player-overlay, .theatre-player-wrapper');
+      if (isPlayerOpen) {
+        return; // Do not intercept, let the event propagate so VideoPlayer's global listener handles it
       }
 
       // If we are focused on an interactive element, act as click

@@ -152,7 +152,8 @@ export default function App() {
   }, [currentFolder, currentSubFolderPath, currentPage, viewMode, playingIndex, isLoading]);
   
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' })
-  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10, imageAutoplaySeconds: 5 })
+  const [activeSettingsTab, setActiveSettingsTab] = useState('general')
+  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10, imageAutoplaySeconds: 5, loopMode: 'none', loopCount: 1 })
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   
   const [favorites, setFavorites] = useState([])
@@ -802,6 +803,7 @@ export default function App() {
         <VideoPlayer 
           video={playlist[pIndex]} 
           playlist={playlist}
+          settings={popoutSettings}
           onClose={() => window.close()}
           onNext={() => {
             let nextIndex = pIndex + 1
@@ -890,6 +892,7 @@ export default function App() {
             onNext={handleNext}
             onPrev={handlePrev}
             settings={settings}
+            onSettingsChange={saveSettings}
           />
         )}
 
@@ -900,8 +903,14 @@ export default function App() {
               <header className="header">
                 <h1>設定中心</h1>
               </header>
+              <div className="settings-tabs">
+                <button className={`settings-tab-btn ${activeSettingsTab === 'general' ? 'active' : ''}`} onClick={() => setActiveSettingsTab('general')}>一般</button>
+                <button className={`settings-tab-btn ${activeSettingsTab === 'playback' ? 'active' : ''}`} onClick={() => setActiveSettingsTab('playback')}>播放</button>
+                <button className={`settings-tab-btn ${activeSettingsTab === 'shortcuts' ? 'active' : ''}`} onClick={() => setActiveSettingsTab('shortcuts')}>快捷鍵</button>
+              </div>
               <div className="settings-content">
-                <div className="settings-section card">
+                {activeSettingsTab === 'general' && (
+<div className="settings-section card">
                   <h3>預設視圖模式</h3>
                   <p className="settings-desc">進入資料夾時預設使用的顯示方式</p>
                   <div className="view-toggles" style={{ marginTop: '16px', background: 'rgba(0,0,0,0.2)' }}>
@@ -911,8 +920,9 @@ export default function App() {
                     <button className={`view-btn ${settings.defaultViewMode === 'theatre' ? 'active' : ''}`} onClick={() => saveSettings({ defaultViewMode: 'theatre' })}><MonitorPlay size={18} /> 劇場</button>
                   </div>
                 </div>
-
-                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  )}
+{activeSettingsTab === 'playback' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>播放行為模式</h3>
                   <p className="settings-desc">點擊影片時的預設播放方式</p>
                   <div className="view-toggles" style={{ marginTop: '16px', background: 'rgba(0,0,0,0.2)' }}>
@@ -931,8 +941,9 @@ export default function App() {
                     </div>
                   )}
                 </div>
-
-                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  )}
+{activeSettingsTab === 'general' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>網格模式分頁數量</h3>
                   <p className="settings-desc">設定網格模式下每頁載入的影片數量，減少卡頓</p>
                   <div className="view-toggles" style={{ marginTop: '16px', background: 'rgba(0,0,0,0.2)', flexWrap: 'wrap' }}>
@@ -958,8 +969,9 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
-                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  )}
+{activeSettingsTab === 'general' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>快取與縮圖存放路徑</h3>
                   <p className="settings-desc">變更應用程式產生之縮圖檔與資料夾快取的儲存位置（適用於節省 C 槽空間）</p>
                   <div className="path-display">
@@ -970,8 +982,9 @@ export default function App() {
                     <button className="btn primary" onClick={handleChangeCachePath}>更改路徑</button>
                   </div>
                 </div>
-
-                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  )}
+{activeSettingsTab === 'general' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>內建瀏覽器首頁</h3>
                   <p className="settings-desc">設定點擊「瀏覽器」時預設載入的網址</p>
                   <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
@@ -984,8 +997,9 @@ export default function App() {
                     />
                   </div>
                 </div>
-
-                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  )}
+{activeSettingsTab === 'shortcuts' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>快捷鍵設定 (播放器)</h3>
                   <p className="settings-desc">設定在播放影片時，用來切換上一部與下一部影片的快捷鍵 (點擊輸入框後按下欲設定的按鍵)。</p>
                   <div style={{ marginTop: '16px', display: 'flex', gap: '16px' }}>
@@ -1017,8 +1031,45 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
-                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  )}
+{activeSettingsTab === 'playback' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
+                  <h3>影片循環模式</h3>
+                  <p className="settings-desc">設定播放影片時預設的循環行為與次數。</p>
+                  <div style={{ marginTop: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>循環模式</label>
+                      <select 
+                        className="view-btn active" 
+                        style={{ padding: '8px 16px', appearance: 'auto', color: 'black' }}
+                        value={settings.loopMode || 'none'}
+                        onChange={(e) => saveSettings({ loopMode: e.target.value })}
+                      >
+                        <option value="none">不循環</option>
+                        <option value="single">單一影片</option>
+                        <option value="playlist">資料夾輪播</option>
+                      </select>
+                    </div>
+                    {settings.loopMode && settings.loopMode !== 'none' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>次數 (0=無限)</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          style={{ width: '80px', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', textAlign: 'center' }}
+                          value={settings.loopCount !== undefined ? settings.loopCount : 1}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10)
+                            if (!isNaN(val) && val >= 0) saveSettings({ loopCount: val })
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                  )}
+{activeSettingsTab === 'playback' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>影片快進 / 倒退秒數</h3>
                   <p className="settings-desc">設定使用鍵盤方向鍵 (左右) 或播放器按鈕時，每次快進與倒退的秒數。</p>
                   <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1036,8 +1087,9 @@ export default function App() {
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>秒</span>
                   </div>
                 </div>
-
-                <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  )}
+{activeSettingsTab === 'general' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>圖片自動輪播秒數</h3>
                   <p className="settings-desc">設定在圖片模式下，自動切換至下一張的等待時間 (0 為關閉自動輪播)。</p>
                   <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1056,7 +1108,8 @@ export default function App() {
                     </select>
                   </div>
                 </div>
-              </div>
+                                )}
+</div>
             </div>
           </div>
 
@@ -1146,6 +1199,7 @@ export default function App() {
                         onNext={handleNext}
                         onPrev={handlePrev}
                         settings={settings}
+                        onSettingsChange={saveSettings}
                         isEmbedded={true}
                       />
                     ) : (
@@ -1603,7 +1657,8 @@ onClick={() => {
                                       window.electronAPI.openPopoutPlayer({
                                         playingIndex: index,
                                         playlist: favVideos,
-                                        alwaysOnTop: settings.defaultAlwaysOnTop
+                                        alwaysOnTop: settings.defaultAlwaysOnTop,
+                                        settings: settings
                                       })
                                     }
                                   } else {
