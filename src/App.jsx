@@ -153,7 +153,7 @@ export default function App() {
   
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' })
   const [activeSettingsTab, setActiveSettingsTab] = useState('general')
-  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10, imageAutoplaySeconds: 5, loopMode: 'none', loopCount: 1 })
+  const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10, imageAutoplaySeconds: 5, loopMode: 'none', loopCount: 1, maxVisiblePages: 7 })
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   
   const [favorites, setFavorites] = useState([])
@@ -944,6 +944,24 @@ export default function App() {
                   )}
 {activeSettingsTab === 'general' && (
 <div className="settings-section card" style={{ marginTop: '24px' }}>
+                  <h3>分頁按鈕顯示數量</h3>
+                  <p className="settings-desc">設定分頁列上最多顯示幾個頁碼按鈕 (建議 5~11 的奇數)</p>
+                  <div style={{ marginTop: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input 
+                      type="number" 
+                      min="5" max="21" step="2"
+                      style={{ width: '80px', padding: '8px 12px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', textAlign: 'center' }}
+                      value={settings.maxVisiblePages || 7}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val) && val >= 5) saveSettings({ maxVisiblePages: val });
+                      }}
+                    />
+                  </div>
+                </div>
+                  )}
+{activeSettingsTab === 'general' && (
+<div className="settings-section card" style={{ marginTop: '24px' }}>
                   <h3>網格模式分頁數量</h3>
                   <p className="settings-desc">設定網格模式下每頁載入的影片數量，減少卡頓</p>
                   <div className="view-toggles" style={{ marginTop: '16px', background: 'rgba(0,0,0,0.2)', flexWrap: 'wrap' }}>
@@ -1392,6 +1410,7 @@ onClick={() => requestSort('size')}>大小 <SortIcon columnKey="size" /></th>
                       totalPages={totalPages} 
                       currentPageIndex={currentPageIndex} 
                       setCurrentPageIndex={setCurrentPageIndex} 
+                      maxVisiblePages={settings.maxVisiblePages || 7}
                     />
                   </div>
                 )}

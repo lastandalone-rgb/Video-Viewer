@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 
-export default function Pagination({ 
+export default function Pagination({
+  maxVisiblePages = 7, 
   totalPages, 
   currentPageIndex, 
-  setCurrentPageIndex 
+  setCurrentPageIndex
 }) {
   const [jumpPageInput, setJumpPageInput] = useState('');
 
@@ -11,16 +12,32 @@ export default function Pagination({
 
   const getPageNumbers = () => {
     const pages = [];
-    if (totalPages <= 7) {
+    const maxItems = maxVisiblePages || 7;
+    
+    if (totalPages <= maxItems) {
       for (let i = 0; i < totalPages; i++) pages.push(i);
+      return pages;
+    }
+
+    const leftBound = Math.floor(maxItems / 2);
+    const rightBound = totalPages - Math.floor(maxItems / 2);
+
+    if (currentPageIndex <= leftBound) {
+      const end = maxItems - 2; 
+      for (let i = 0; i < end; i++) pages.push(i);
+      pages.push('...', totalPages - 1);
+    } else if (currentPageIndex >= rightBound - 1) {
+      pages.push(0, '...');
+      const start = totalPages - (maxItems - 2);
+      for (let i = start; i < totalPages; i++) pages.push(i);
     } else {
-      if (currentPageIndex <= 3) {
-        pages.push(0, 1, 2, 3, 4, '...', totalPages - 1);
-      } else if (currentPageIndex >= totalPages - 4) {
-        pages.push(0, '...', totalPages - 5, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1);
-      } else {
-        pages.push(0, '...', currentPageIndex - 1, currentPageIndex, currentPageIndex + 1, '...', totalPages - 1);
+      pages.push(0, '...');
+      const midPages = Math.max(1, maxItems - 4);
+      const midStart = currentPageIndex - Math.floor(midPages / 2);
+      for (let i = 0; i < midPages; i++) {
+        pages.push(midStart + i);
       }
+      pages.push('...', totalPages - 1);
     }
     return pages;
   };
