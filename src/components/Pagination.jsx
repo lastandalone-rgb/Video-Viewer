@@ -78,12 +78,15 @@ export default function Pagination({
             className={`btn ${currentPageIndex === page ? 'active' : ''}`}
             style={{ padding: '8px 14px' }}
             onClick={() => handlePageClick(page)}
+            data-is-next-page={page === currentPageIndex + 1 ? 'true' : undefined}
           >
             {page + 1}
           </button>
         )
       ))}
-      <button className="btn" style={{ padding: '8px 12px' }} disabled={currentPageIndex === totalPages - 1} onClick={() => setCurrentPageIndex(p => p + 1)}>&gt;</button>
+      <button className="btn" style={{ padding: '8px 12px' }} disabled={currentPageIndex === totalPages - 1} onClick={() => setCurrentPageIndex(p => p + 1)}
+        data-is-next-arrow="true"
+      >&gt;</button>
       <div style={{ display: 'flex', alignItems: 'center', marginLeft: '16px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '16px' }}>
         <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginRight: '8px' }}>跳轉:</span>
         <input 

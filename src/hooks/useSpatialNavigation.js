@@ -121,6 +121,25 @@ export function useSpatialNavigation() {
             score += 50000;
           }
 
+          // Artificial magnet to the "Next Page" button when entering pagination from outside
+          const isActiveInPagination = activeEl.closest('.pagination-controls') !== null;
+          const isElInPagination = el.closest('.pagination-controls') !== null;
+
+          if (!isActiveInPagination && isElInPagination && key === 's') {
+            if (el.dataset.isNextPage === 'true') {
+              score -= 1000000; // Strongest magnet
+            } else if (el.dataset.isNextArrow === 'true') {
+              const hasNextPageBtn = document.querySelector('[data-is-next-page="true"]');
+              if (!hasNextPageBtn) {
+                score -= 500000;
+              } else {
+                score += 100000;
+              }
+            } else {
+              score += 100000;
+            }
+          }
+
           if (score < minScore) {
             minScore = score;
             bestMatch = el;
