@@ -195,9 +195,11 @@ export default function App() {
       setTimeout(() => {
         const targetCard = document.querySelector(`[data-video-index="${playingIndex}"]`);
         if (targetCard) {
-          // If we focus it, the spatial navigation will remember it as the last focused element.
-          // When the video player closes, the focus will naturally return to it!
-          targetCard.focus({ preventScroll: true });
+          // Simply update the reference. We DO NOT focus it now, because that would 
+          // give it z-index: 100 and make it poke through the video player overlay.
+          // When the player is closed (playingIndex === -1), another useEffect will 
+          // automatically restore focus to this lastFocusedCardRef!
+          lastFocusedCardRef.current = targetCard;
           
           if (viewMode === 'theatre') {
             targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
