@@ -153,17 +153,37 @@ export function useSpatialNavigation() {
           const isElInPagination = el.closest('.pagination-controls') !== null;
 
           if (!isActiveInPagination && isElInPagination && key === 's') {
-            if (el.dataset.isNextPage === 'true') {
-              score -= 1000000; // Strongest magnet
-            } else if (el.dataset.isNextArrow === 'true') {
-              const hasNextPageBtn = document.querySelector('[data-is-next-page="true"]');
-              if (!hasNextPageBtn) {
-                score -= 500000;
+            // Check if the container of the active element has reached the bottom
+            let isScrolledToBottom = true;
+            if (activeScrollParent) {
+              // Sometimes scrollHeight is slightly off due to subpixels, use a 10px buffer
+              const maxScrollTop = activeScrollParent.scrollHeight - activeScrollParent.clientHeight;
+              
+              // For body/documentElement, we might need to check window.scrollY
+              const currentScrollTop = activeScrollParent === document.body || activeScrollParent === document.documentElement 
+                ? Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop)
+                : activeScrollParent.scrollTop;
+                
+              if (currentScrollTop < maxScrollTop - 10) {
+                isScrolledToBottom = false;
+              }
+            }
+
+            if (!isScrolledToBottom) {
+              score += 10000000; // Unreachable, so it will fall back to scrolling down natively
+            } else {
+              if (el.dataset.isNextPage === 'true') {
+                score -= 1000000; // Strongest magnet
+              } else if (el.dataset.isNextArrow === 'true') {
+                const hasNextPageBtn = document.querySelector('[data-is-next-page="true"]');
+                if (!hasNextPageBtn) {
+                  score -= 500000;
+                } else {
+                  score += 100000;
+                }
               } else {
                 score += 100000;
               }
-            } else {
-              score += 100000;
             }
           }
 
