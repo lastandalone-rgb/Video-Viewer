@@ -701,8 +701,9 @@ export default function App() {
       return fileTypeFilter.has(v.type || 'video')
     })
     sortable.sort((a, b) => {
-      let aVal = a[sortConfig.key] || (sortConfig.key === 'name' ? '' : 0)
-      let bVal = b[sortConfig.key] || (sortConfig.key === 'name' ? '' : 0)
+      const fallback = (sortConfig.key === 'name' || sortConfig.key === 'path') ? '' : 0;
+      let aVal = a[sortConfig.key] || fallback;
+      let bVal = b[sortConfig.key] || fallback;
       
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
       if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
@@ -1186,6 +1187,18 @@ export default function App() {
                     <button className={`view-btn ${currentFolder?.mode !== 'hierarchy' ? 'active' : ''}`} onClick={handleToggleMode} title="扁平模式">扁平</button>
                     <button className={`view-btn ${currentFolder?.mode === 'hierarchy' ? 'active' : ''}`} onClick={handleToggleMode} title="樹狀模式">
                       <FolderTree size={16} style={{ marginRight: 4 }}/> 樹狀
+                    </button>
+                  </div>
+
+                  <div className="view-toggles no-drag" style={{ background: 'var(--bg-card)', display: 'flex', alignItems: 'center' }}>
+                    <button className={`view-btn ${sortConfig.key === 'name' ? 'active' : ''}`} onClick={() => requestSort('name')} title="按檔名排序" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      檔名 <SortIcon columnKey="name" />
+                    </button>
+                    <button className={`view-btn ${sortConfig.key === 'path' ? 'active' : ''}`} onClick={() => requestSort('path')} title="按資料夾排序" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      資料夾 <SortIcon columnKey="path" />
+                    </button>
+                    <button className={`view-btn ${sortConfig.key === 'date' ? 'active' : ''}`} onClick={() => requestSort('date')} title="按建立時間排序" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      時間 <SortIcon columnKey="date" />
                     </button>
                   </div>
 
