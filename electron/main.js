@@ -617,6 +617,73 @@ ipcMain.handle('save-settings', async (event, settings) => {
   return db.settings
 })
 
+
+async function getDirectorySize(dirPath) {
+  let size = 0;
+  try {
+    const files = await fs.readdir(dirPath, { withFileTypes: true });
+    for (const file of files) {
+      const fullPath = path.join(dirPath, file.name);
+      if (file.isDirectory()) {
+        size += await getDirectorySize(fullPath);
+      } else {
+        const stat = await fs.stat(fullPath);
+        size += stat.size;
+      }
+    }
+  } catch (e) {
+    // Ignore missing directories
+  }
+  return size;
+}
+
+ipcMain.handle('get-cache-stats', async () => {
+  const { thumbCacheDir, folderCacheDir } = await getCacheDirs();
+  const subtitleCacheDir = path.join(app.getPath('userData'), 'SubtitleCache');
+  
+  const [thumbSize, folderSize, subtitleSize] = await Promise.all([
+    getDirectorySize(thumbCacheDir),
+    getDirectorySize(folderCacheDir),
+    getDirectorySize(subtitleCacheDir)
+  ]);
+  
+  return {
+    thumbSize,
+    folderSize,
+    subtitleSize,
+    totalSize: thumbSize + folderSize + subtitleSize,
+    cacheDir: (await readDb()).settings?.cachePath || app.getPath('userData')
+  };
+});
+
+ipcMain.handle('open-cache-folder', async () => {
+  const customPath = (await readDb()).settings?.cachePath;
+  const targetDir = customPath || app.getPath('userData');
+  const { shell } = require('electron');
+  shell.openPath(targetDir);
+});
+
+ipcMain.handle('clear-cache-folder', async () => {
+  const { thumbCacheDir, folderCacheDir } = await getCacheDirs();
+  const subtitleCacheDir = path.join(app.getPath('userData'), 'SubtitleCache');
+  
+  const clearDir = async (dir) => {
+    try {
+      const files = await fs.readdir(dir);
+      for (const file of files) {
+        await fs.unlink(path.join(dir, file)).catch(() => {});
+      }
+    } catch(e) {}
+  };
+  
+  await Promise.all([
+    clearDir(thumbCacheDir),
+    clearDir(folderCacheDir),
+    clearDir(subtitleCacheDir)
+  ]);
+  return true;
+});
+
 ipcMain.handle('choose-directory', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory']

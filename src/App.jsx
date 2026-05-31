@@ -153,6 +153,35 @@ export default function App() {
   
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' })
   const [activeSettingsTab, setActiveSettingsTab] = useState('general')
+  const [cacheStats, setCacheStats] = useState(null)
+  const loadCacheStats = async () => {
+    if (window.electronAPI && window.electronAPI.getCacheStats) {
+      const stats = await window.electronAPI.getCacheStats()
+      setCacheStats(stats)
+    }
+  }
+  useEffect(() => {
+    if (activeSettingsTab === 'general') {
+      loadCacheStats()
+    }
+  }, [activeSettingsTab])
+  
+  const handleOpenCacheFolder = () => {
+    if (window.electronAPI && window.electronAPI.openCacheFolder) {
+      window.electronAPI.openCacheFolder()
+    }
+  }
+
+  const handleClearCache = async () => {
+    if (window.electronAPI && window.electronAPI.clearCacheFolder) {
+      if (confirm('確定要清除所有縮圖與資料夾快取嗎？（下次瀏覽時會重新產生，不影響原始檔案）')) {
+        await window.electronAPI.clearCacheFolder()
+        await loadCacheStats()
+        alert('快取已清除')
+      }
+    }
+  }
+
   const [settings, setSettings] = useState({ defaultViewMode: 'grid', cachePath: '', playbackBehavior: 'inline', defaultAlwaysOnTop: false, gridItemsPerPage: 48, browserUrl: 'https://www.google.com', shortcuts: { prev: 'a', next: 'c' }, skipSeconds: 10, imageAutoplaySeconds: 5, loopMode: 'none', loopCount: 1, maxVisiblePages: 7 })
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   
@@ -1021,10 +1050,28 @@ export default function App() {
                   <div className="path-display">
                     <HardDrive size={18} opacity={0.7} />
                     <span style={{ flex: 1, fontFamily: 'monospace', fontSize: '0.9rem', color: '#94a3b8' }}>
-                      {settings.cachePath || '系統預設路徑 (AppData)'}
+                      {settings.cachePath || cacheStats?.cacheDir || '系統預設路徑 (AppData)'}
                     </span>
-                    <button className="btn primary" onClick={handleChangeCachePath}>更改路徑</button>
+                    <button className="btn secondary" onClick={handleOpenCacheFolder}>打開資料夾</button>
+                    <button className="btn primary" onClick={async () => { await handleChangeCachePath(); loadCacheStats(); }}>更改路徑</button>
                   </div>
+                  
+                  {cacheStats && (
+                    <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ color: '#cbd5e1', fontWeight: 500 }}>目前快取佔用空間</span>
+                        <span style={{ color: 'var(--accent-color)', fontWeight: 600 }}>{formatSize(cacheStats.totalSize)}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '12px' }}>
+                        <span>縮圖: {formatSize(cacheStats.thumbSize)}</span>
+                        <span>資料夾: {formatSize(cacheStats.folderSize)}</span>
+                        <span>字幕: {formatSize(cacheStats.subtitleSize)}</span>
+                      </div>
+                      <button className="btn" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }} onClick={handleClearCache}>
+                        清除所有快取
+                      </button>
+                    </div>
+                  )}
                 </div>
                   )}
 {activeSettingsTab === 'general' && (
