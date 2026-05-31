@@ -36,6 +36,21 @@ export function useSpatialNavigation() {
 
     const key = e.key.toLowerCase();
     
+    if (key === 'z' || key === 'c') {
+      if (activeEl && activeEl.closest('.pagination-controls')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (key === 'z') {
+          const prevBtn = document.querySelector('.pagination-controls button:first-child');
+          if (prevBtn && !prevBtn.disabled) prevBtn.click();
+        } else if (key === 'c') {
+          const nextBtn = document.querySelector('.pagination-controls button[data-is-next-arrow="true"]');
+          if (nextBtn && !nextBtn.disabled) nextBtn.click();
+        }
+        return;
+      }
+    }
+
     if (key === 'x') {
       // If there is any active video player globally, X should ALWAYS close the player.
       // We don't want a stray activeElement (e.g. user accidentally clicked outside the player) 
