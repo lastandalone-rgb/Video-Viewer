@@ -42,10 +42,22 @@ export function useSpatialNavigation() {
         e.stopPropagation();
         if (key === 'z') {
           const prevBtn = document.querySelector('.pagination-controls button:first-child');
-          if (prevBtn && !prevBtn.disabled) prevBtn.click();
+          if (prevBtn && !prevBtn.disabled) {
+            prevBtn.click();
+            setTimeout(() => {
+              const activeBtn = document.querySelector('.pagination-controls button.active');
+              if (activeBtn) activeBtn.focus({ preventScroll: true });
+            }, 50);
+          }
         } else if (key === 'c') {
           const nextBtn = document.querySelector('.pagination-controls button[data-is-next-arrow="true"]');
-          if (nextBtn && !nextBtn.disabled) nextBtn.click();
+          if (nextBtn && !nextBtn.disabled) {
+            nextBtn.click();
+            setTimeout(() => {
+              const activeBtn = document.querySelector('.pagination-controls button.active');
+              if (activeBtn) activeBtn.focus({ preventScroll: true });
+            }, 50);
+          }
         }
         return;
       }
