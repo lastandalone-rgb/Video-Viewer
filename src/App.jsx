@@ -189,6 +189,25 @@ export default function App() {
   const [browserInputUrl, setBrowserInputUrl] = useState(settings.browserUrl)
   const [currentBrowserUrl, setCurrentBrowserUrl] = useState(settings.browserUrl)
 
+  // Sync background focus when playingIndex changes
+  useEffect(() => {
+    if (playingIndex !== -1 && !isPopoutMode) {
+      setTimeout(() => {
+        const targetCard = document.querySelector(`[data-video-index="${playingIndex}"]`);
+        if (targetCard) {
+          // If we focus it, the spatial navigation will remember it as the last focused element.
+          // When the video player closes, the focus will naturally return to it!
+          targetCard.focus({ preventScroll: true });
+          
+          if (viewMode === 'theatre') {
+            targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+          } else {
+            targetCard.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'nearest' });
+          }
+        }
+      }, 50);
+    }
+  }, [playingIndex, viewMode, isPopoutMode]);
   useEffect(() => {
     setBrowserInputUrl(settings.browserUrl)
     setCurrentBrowserUrl(settings.browserUrl)
