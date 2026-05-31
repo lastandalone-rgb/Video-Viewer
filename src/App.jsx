@@ -743,6 +743,10 @@ export default function App() {
       else { setPlayingIndex(-1); return }
     }
     setPlayingIndex(nextIndex)
+    if (viewMode !== 'theatre' && settings.gridItemsPerPage && settings.gridItemsPerPage !== 'all') {
+      const newPage = Math.floor(nextIndex / settings.gridItemsPerPage)
+      if (newPage !== currentPageIndex) setCurrentPageIndex(newPage)
+    }
   }
 
   const handlePrev = () => {
@@ -1232,7 +1236,8 @@ export default function App() {
                     {theatreVideos.map((vid, index) => (
                       <div 
                         key={vid.path} 
-                        className={`ribbon-card ${playingIndex === index ? 'active' : ''}`} 
+                        className={`ribbon-card ${playingIndex === index ? 'active' : ''}`}
+                        data-video-index={index} 
                         tabIndex={0}
 onClick={() => setPlayingIndex(index)}
                         onContextMenu={(e) => handleContextMenu(e, 'video', vid.path)}
@@ -1350,6 +1355,7 @@ onClick={() => requestSort('size')}>大小 <SortIcon columnKey="size" /></th>
                                     key={file.path}
                                     ref={el => { if (currentFolder?.mode === 'hierarchy') fileCardRefs.current[file.path] = el }}
                                     className={`card ${isSelected ? 'selected' : ''}`}
+                                    data-video-index={actualIndex}
                                     style={{ cursor: 'pointer', outline: isSelected ? '2px solid var(--accent-color)' : 'none', outlineOffset: '2px' }}
                                     tabIndex={0}
                                     onClick={(e) => {
@@ -1381,6 +1387,7 @@ onClick={() => requestSort('size')}>大小 <SortIcon columnKey="size" /></th>
                                     key={file.path}
                                     ref={el => { if (currentFolder?.mode === 'hierarchy') fileCardRefs.current[file.path] = el }}
                                     className={`file-card ${isSelected ? 'selected' : ''}`}
+                                    data-video-index={actualIndex}
                                     tabIndex={0}
                                     onClick={(e) => { if (isDraggingRef.current) return; toggleSelectFile(e, file.path) }}
                                     onContextMenu={(e) => openHierarchyCtxMenu(e, file)}
